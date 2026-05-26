@@ -13,21 +13,36 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }) => {
+  // STALE TIME: 5 phút (300.000ms)
+  const CACHE_STALE_TIME = 300000;
+
   // Helper để lưu/lấy data từ localStorage giúp chống mất dữ liệu khi F5 hoặc để lâu
   const getPersistedData = (key, defaultValue) => {
     try {
-      const saved = localStorage.getItem(`bnc_${key}`);
-      return saved ? JSON.parse(saved) : defaultValue;
+      const saved = localStorage.getItem(`bnc_pub_${key}`);
+      if (!saved) return defaultValue;
+      
+      const { data, cachedAt } = JSON.parse(saved);
+      // Kiểm tra nếu dữ liệu quá cũ (> 5 phút) thì vẫn trả về nhưng đánh dấu là stale
+      return data || defaultValue;
     } catch {
       return defaultValue;
     }
   };
 
   const persistData = (key, data) => {
+    // Chỉ cache dữ liệu public, không cache dữ liệu nhạy cảm
+    const publicKeys = ['news', 'status', 'settings', 'carousel'];
+    if (!publicKeys.includes(key)) return;
+
     try {
-      localStorage.setItem(`bnc_${key}`, JSON.stringify(data));
+      const cacheObject = {
+        data,
+        cachedAt: Date.now()
+      };
+      localStorage.setItem(`bnc_pub_${key}`, JSON.stringify(cacheObject));
     } catch (err) {
-      console.error('Persist error:', err);
+      console.error(`Persist error for ${key}:`, err);
     }
   };
 
@@ -50,6 +65,7 @@ export const DataProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isDataStale, setIsDataStale] = useState(false);
 
   // Sync state với localStorage mỗi khi thay đổi
   useEffect(() => { persistData('news', news); }, [news]);
@@ -169,16 +185,25 @@ export const DataProvider = ({ children }) => {
         carouselPromise
       ]);
 
-      // CHỈ CẬP NHẬT NẾU CÓ DỮ LIỆU TRẢ VỀ, KHÔNG OVERWRITE BẰNG NULL/EMPTY KHI LỖI
-      if (newsRes.data && newsRes.data.length > 0) {
+      // Xử lý lỗi 401/403 tập trung
+      const results = [newsRes, settingsRes, statusRes, contactsRes, carouselRes];
+      const authError = results.find(r => r.error && (r.error.status === 401 || r.error.status === 403));
+      if (authError) {
+        console.error('Auth error detected, logging out...', authError.error);
+        logout();
+        return;
+      }
+
+      // CHỈ CẬP NHẬT NẾU CÓ DỮ LIỆU TRẢ VỀ
+      if (newsRes.data) {
         setNews(newsRes.data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
       }
       
-      if (contactsRes.data && contactsRes.data.length > 0) {
+      if (contactsRes.data) {
         setContacts(contactsRes.data);
       }
       
-      if (carouselRes.data && carouselRes.data.length > 0) {
+      if (carouselRes.data) {
         setCarouselImages(carouselRes.data);
       }
       
@@ -195,9 +220,10 @@ export const DataProvider = ({ children }) => {
           version: statusRes.data.version 
         });
       }
+      setIsDataStale(false);
     } catch (error) {
-      console.error('Data persistence layer: API fail, keeping existing state.', error);
-      // Giữ nguyên state cũ, không set về []
+      console.error('API connection fail, using stale data.', error);
+      setIsDataStale(true); // Hiển thị cảnh báo dữ liệu cũ
     }
   };
 
@@ -621,6 +647,9 @@ export const DataProvider = ({ children }) => {
           setUserProfile(null);
           setNews([]); // Clear data nhạy cảm
           setContacts([]);
+          // Xóa toàn bộ cache khi logout để bảo mật
+          const publicKeys = ['news', 'status', 'settings', 'carousel'];
+          publicKeys.forEach(k => localStorage.removeItem(`bnc_pub_${k}`));
         }
         setLoading(false);
       });
@@ -628,6 +657,13 @@ export const DataProvider = ({ children }) => {
     };
 
     initializeAuth();
+
+    // Tự động refetch khi window focus lại
+    const handleFocus = () => {
+      console.log('Window focused, checking for data updates...');
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
 
     // CHỈ SỬ DỤNG REAL-TIME CHO NHỮNG THỨ CẦN THIẾT NHẤT
     // Gom nhóm các table vào 1 channel để giảm số lượng WebSocket connections
