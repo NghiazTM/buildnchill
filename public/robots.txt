@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.buildnchill.id.vn/sitemap.xml
+Sitemap: https://buildnchill.id.vn/sitemap.xml

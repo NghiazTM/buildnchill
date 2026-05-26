@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.buildnchill.id.vn/</loc>
+    <loc>https://buildnchill.id.vn/</loc>
     <lastmod>2026-02-02</lastmod>
     <priority>1.0</priority>
     <changefreq>daily</changefreq>
   </url>
   <url>
-    <loc>https://www.buildnchill.id.vn/shop</loc>
+    <loc>https://buildnchill.id.vn/shop</loc>
     <lastmod>2026-02-02</lastmod>
     <priority>0.8</priority>
     <changefreq>weekly</changefreq>
   </url>
   <url>
-    <loc>https://www.buildnchill.id.vn/news</loc>
+    <loc>https://buildnchill.id.vn/news</loc>
     <lastmod>2026-02-02</lastmod>
     <priority>0.7</priority>
     <changefreq>weekly</changefreq>
   </url>
   <url>
-    <loc>https://www.buildnchill.id.vn/contact</loc>
+    <loc>https://buildnchill.id.vn/contact</loc>
     <lastmod>2026-02-02</lastmod>
     <priority>0.5</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://www.buildnchill.id.vn/about</loc>
+    <loc>https://buildnchill.id.vn/about</loc>
     <lastmod>2026-02-02</lastmod>
     <priority>0.5</priority>
     <changefreq>monthly</changefreq>

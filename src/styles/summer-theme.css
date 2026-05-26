@@ -366,3 +366,38 @@ a {
 .card-text {
   color: var(--text-muted) !important;
 }
+
+/* --- CAROUSEL / BANNER MOBILE OPTIMIZATION --- */
+.carousel {
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-main);
+}
+
+.carousel-item img {
+  object-fit: cover;
+  height: 500px; /* Default Desktop height */
+}
+
+@media (max-width: 768px) {
+  .carousel-item img {
+    height: 250px !important; /* Fixed height for mobile to avoid being too tall */
+    object-position: center;
+  }
+
+  .carousel-caption {
+    padding-bottom: 1rem;
+  }
+
+  .carousel-caption h3 {
+    font-size: 1.2rem !important;
+  }
+
+  .carousel-caption p {
+    font-size: 0.8rem !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
