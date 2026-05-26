@@ -1,8 +1,8 @@
-# 🧧 BuildnChill Minecraft - Lunar New Year 2026 🏮
+# 🌊 BuildnChill Minecraft - Ocean Summer 2026 🏝️
 
 <div align="center">
   <img src="public/favicon.ico" width="100" height="100" alt="BuildnChill Logo">
-  <h3>✨ Trải nghiệm Minecraft chuyên nghiệp - Chào đón Xuân Bính Ngọ 🐎 ✨</h3>
+  <h3>✨ Trải nghiệm Minecraft chuyên nghiệp - Đắm mình trong Đại dương Mùa Hè 🌊 ✨</h3>
   <p align="center">
     <img src="https://img.shields.io/badge/React-18.x-61DAFB?logo=react" alt="React">
     <img src="https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite" alt="Vite">
@@ -16,63 +16,61 @@
 
 ## 🌟 Giới Thiệu
 
-**BuildnChill Website** là nền tảng quản trị và cửa hàng trực tuyến dành riêng cho server Minecraft BuildnChill. Ứng dụng được xây dựng trên nền tảng React hiện đại, tích hợp hệ thống dữ liệu thời gian thực và giao diện tùy biến theo chủ đề Tết Bính Ngọ 2026.
+**BuildnChill Summer** là nền tảng quản trị và cửa hàng trực tuyến lấy cảm hứng từ đại dương xanh mát dành riêng cho server Minecraft BuildnChill. Ứng dụng được xây dựng trên nền tảng React hiện đại, mang đến hơi thở mùa hè sôi động với hệ thống dữ liệu thời gian thực và giao diện tối ưu.
 
 ## 🚀 Tính Năng Nổi Bật
 
-### 🧧 Giao Diện Tết Bính Ngọ 2026
+### 🏖️ Giao Diện Ocean Summer
+- **Summer-Theme Sync**: Đồng bộ toàn bộ giao diện theo tông màu Xanh Đại Dương (Deep Blue) & Vàng Cát (Sand Yellow).
+- **Hiệu ứng Sóng Biển**: Hiệu ứng chuyển động mượt mà, sóng biển và cá heo bơi lội sống động qua Framer Motion.
+- **Summer Glassmorphism**: Phong cách thiết kế kính mờ hiện đại, mang lại cảm giác nhẹ nhàng, tinh tế.
 
-- **Tet-Theme Sync**: Đồng bộ toàn bộ nút bấm, thẻ bài và hiệu ứng theo tông màu Đỏ May Mắn & Vàng Sang Trọng.
-- **Hiệu ứng Hoạt Ảnh**: Pháo hoa, hoa mai và hoa đào rơi mượt mà với Framer Motion.
-- **Modal Chuyên Nghiệp**: Nút đóng (X) phong cách bao lì xì, tạo trải nghiệm người dùng độc đáo.
+### 🛡️ Hệ Thống Quản Trị Chuyên Nghiệp
+- **Soft Delete (Xóa Mềm)**: Bảo toàn dữ liệu (Sản phẩm, Đơn hàng, Tin tức) với cơ chế `is_deleted`, giúp khôi phục dễ dàng khi cần thiết.
+- **Dashboard Thống Kê**: Theo dõi doanh thu theo ngày/tháng/năm và quản lý các "Đại gia" nạp top.
+- **Quản lý Cửa Hàng**: Thêm, sửa, xóa Sản phẩm và Danh mục trực quan ngay trong Admin Panel.
 
-### 🛡️ Hệ Thống Quản Trị Thông Minh
-
-- **Soft Delete (Xóa Mềm)**: Dữ liệu (Tin tức, Đơn hàng, Liên hệ, Sản phẩm) không bao giờ bị mất hoàn toàn, được bảo toàn trong database với trạng thái `is_deleted`.
-- **Dashboard Thống Kê**: Biểu đồ doanh thu theo ngày, tháng, năm và quản lý sản phẩm bán chạy.
-- **Quản lý Cửa Hàng**: CRUD (Thêm, Sửa, Xóa) Danh mục và Sản phẩm dễ dàng.
-
-### 🤖 Đồng Bộ Discord & Game
-
-- **Discord Webhook**: Tự động thông báo đơn hàng mới, cập nhật trạng thái đơn hàng (Đã thanh toán/Đã giao) trực tiếp lên server Discord.
-- **Minecraft Command Queue**: Tự động đưa lệnh vào hàng chờ (`pending_commands`) để Plugin thực thi trong game ngay khi đơn hàng được xác nhận.
+### 🤖 Tự Động Hóa Toàn Diện
+- **SePay Automation**: Tích hợp hệ thống nạp tiền tự động qua QR Code và Banking, xác nhận giao dịch trong 30 giây.
+- **Discord Sync**: Thông báo thời gian thực các sự kiện Nạp tiền (kênh Bank), Mua hàng (kênh Shop) và Liên hệ (kênh Support).
+- **Minecraft Command Queue**: Tự động thực thi lệnh trao quà trong game ngay khi thanh toán thành công.
 
 ## 🛠️ Công Nghệ Sử Dụng
 
 - **Frontend**: React 18, Vite, Framer Motion, React Icons.
-- **Styling**: CSS3 (Custom Tet Theme), Bootstrap 5.
-- **Backend-as-a-Service**: Supabase (Database, Auth, Storage, Real-time).
-- **Automation**: Discord Webhook API, Playwright (E2E Testing).
+- **Styling**: CSS3 (Summer Theme), Bootstrap 5.
+- **Backend-as-a-Service**: Supabase (PostgreSQL, Auth, Storage, Real-time).
+- **Automation**: Discord Webhook API, Netlify Functions.
 
 ---
 
 ## 📦 Cài Đặt & Khởi Chạy
 
 ### 1. Cài đặt Dependencies
-
 ```bash
 npm install
 ```
 
 ### 2. Cấu hình Môi trường
-
-Tạo file `.env` tại thư mục gốc và cấu hình key Supabase:
-
+Tạo file `.\.env` tại thư mục gốc và cấu hình các thông số:
 ```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_SUPABASE_URL=your_url
+VITE_SUPABASE_ANON_KEY=your_key
+VITE_DISCORD_BANK_WEBHOOK=your_webhook
+VITE_DISCORD_SHOP_WEBHOOK=your_webhook
+VITE_DISCORD_CONTACT_WEBHOOK=your_webhook
+VITE_BANK_ACCOUNT=your_account
+VITE_BANK_NAME=your_bank
+VITE_BANK_ACCOUNT_NAME=your_name
 ```
 
 ### 3. Setup Database
-
-Chạy các scripts migration theo thứ tự:
-
-1. `SHOP_SETUP.sql`
-2. `SOFT_DELETE_MIGRATION.sql`
-3. `UPDATE_SLUG_COLUMN.sql`
+Chạy các scripts migration trong Supabase SQL Editor:
+1. `.\SHOP_SETUP.sql`
+2. `.\SOFT_DELETE_MIGRATION.sql`
+3. `.\SEPAY_INTEGRATION_SETUP.sql`
 
 ### 4. Khởi chạy Development
-
 ```bash
 npm run dev
 ```
@@ -81,16 +79,16 @@ npm run dev
 
 ```text
 src/
-├── components/   # Các thành phần giao diện (Navbar, Footer, Shop, Admin)
-├── context/      # Quản lý trạng thái ứng dụng (DataContext)
-├── pages/        # Các trang chính (Home, Shop, News, Admin, Login)
-├── styles/       # Hệ thống CSS (tet-theme.css, shop-tet.css)
-└── utils/        # Hàm hỗ trợ (helpers, slugify)
+├── components/   # Các thành phần Summer UI (Shop, Admin, Carousel)
+├── context/      # Quản lý dữ liệu tập trung (DataContext)
+├── pages/        # Các trang chính (Home, Shop, News, Recharge)
+├── styles/       # Hệ thống CSS Mùa Hè (summer-theme.css)
+└── utils/        # Hàm xử lý (helpers, constants)
 ```
 
 ---
 
 <div align="center">
-  <p>Chúc bạn một năm mới Bính Ngọ an khang, thịnh vượng! 🧧🐎</p>
+  <p>Hãy tận hưởng một mùa hè tuyệt vời cùng BuildnChill! 🌴🥥🐚</p>
   <p><b>BuildnChill Development Team</b></p>
 </div>
