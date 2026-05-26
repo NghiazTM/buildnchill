@@ -541,39 +541,51 @@ export const DataProvider = ({ children }) => {
 
     const initializeAuth = async () => {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      let currentProfile = null;
-      if (session?.user) {
-        setUser(session.user);
-        setIsAuthenticated(true);
-        currentProfile = await fetchUserProfile(session.user.id);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-        setUserProfile(null);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        let currentProfile = null;
+        if (session?.user) {
+          setUser(session.user);
+          setIsAuthenticated(true);
+          currentProfile = await fetchUserProfile(session.user.id);
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+          setUserProfile(null);
+        }
+        
+        // Chỉ load data một lần duy nhất khi khởi tạo hoặc khi user thay đổi (đăng nhập/đăng xuất)
+        await loadData(currentProfile);
+      } catch (err) {
+        console.error('Initialization error:', err);
+      } finally {
+        setLoading(false);
       }
-      
-      await loadData(currentProfile);
-      setLoading(false);
 
-      // Tự động làm mới trạng thái server mỗi 2 phút
+      // Tự động làm mới trạng thái server mỗi 5 phút (tăng thời gian để giảm tải)
+      if (statusInterval) clearInterval(statusInterval);
       statusInterval = setInterval(() => {
         refreshMinecraftStatus();
-      }, 120000);
+      }, 300000);
 
       // Thiết lập listener sau khi đã init xong
+      if (authSubscription) return; // Tránh tạo nhiều listener
+      
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
         const currentUser = session?.user ?? null;
         
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || (event === 'INITIAL_SESSION' && currentUser)) {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setUser(currentUser);
           setIsAuthenticated(true);
           await fetchUserProfile(currentUser.id);
+          await loadData(); // Load lại data khi user mới vào
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setIsAuthenticated(false);
           setUserProfile(null);
+          setNews([]); // Clear data nhạy cảm
+          setContacts([]);
         }
         setLoading(false);
       });
@@ -582,69 +594,41 @@ export const DataProvider = ({ children }) => {
 
     initializeAuth();
 
-    // Real-time subscriptions cho dữ liệu
-    const newsChannel = supabase.channel('news_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'news' }, () => {
-      supabase.from('news').select('*').eq('is_deleted', false).order('date', { ascending: false }).then(({ data }) => {
-        if (data) setNews(data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
-      });
-    }).subscribe();
-
-    const statusChannel = supabase.channel('status_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'server_status' }, (payload) => {
-      if (payload.new) {
-        setServerStatus({
-          status: payload.new.status,
-          players: payload.new.players,
-          maxPlayers: payload.new.max_players,
-          version: payload.new.version
-        });
-      }
-    }).subscribe();
-
-    const contactChannel = supabase.channel('contact_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => {
-      supabase.from('contacts').select('*').eq('is_deleted', false).order('created_at', { ascending: false }).then(({ data }) => {
-        if (data) setContacts(data);
-      });
-    }).subscribe();
-
-    const walletChannel = supabase.channel('wallet_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, (payload) => {
-      // Cập nhật profile nếu là ví của user hiện tại
-      const currentUserId = user?.id;
-      if (currentUserId && (payload.new.user_id === currentUserId || payload.old?.user_id === currentUserId)) {
-        fetchUserProfile(currentUserId);
-      }
-      // Thông báo cho các trang quản trị ví
-      window.dispatchEvent(new CustomEvent('wallet_updated'));
-    }).subscribe();
-
-    // Thêm listener cho recharges để cập nhật danh sách tự động nếu đang ở trang quản trị
-    const rechargeChannel = supabase.channel('recharge_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'recharges' }, () => {
-      // Phát sự kiện custom để các component biết mà fetch lại
-      window.dispatchEvent(new CustomEvent('recharge_updated'));
-    }).subscribe();
-
-    // Thêm listener cho orders
-    const orderChannel = supabase.channel('order_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-      window.dispatchEvent(new CustomEvent('orders_updated'));
-    }).subscribe();
-
-    const carouselChannel = supabase.channel('carousel_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'carousel_images' }, () => {
-      supabase.from('carousel_images').select('*').order('display_order', { ascending: true }).then(({ data }) => {
-        if (data) setCarouselImages(data);
-      });
-    }).subscribe();
+    // CHỈ SỬ DỤNG REAL-TIME CHO NHỮNG THỨ CẦN THIẾT NHẤT
+    // Gom nhóm các table vào 1 channel để giảm số lượng WebSocket connections
+    const dbChanges = supabase.channel('system_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'server_status' }, (payload) => {
+        if (payload.new) {
+          setServerStatus({
+            status: payload.new.status,
+            players: payload.new.players,
+            maxPlayers: payload.new.max_players,
+            version: payload.new.version
+          });
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, (payload) => {
+        const currentUserId = user?.id;
+        if (currentUserId && (payload.new.user_id === currentUserId || payload.old?.user_id === currentUserId)) {
+          fetchUserProfile(currentUserId);
+        }
+        window.dispatchEvent(new CustomEvent('wallet_updated'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recharges' }, () => {
+        window.dispatchEvent(new CustomEvent('recharge_updated'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        window.dispatchEvent(new CustomEvent('orders_updated'));
+      })
+      .subscribe();
 
     return () => {
       if (authSubscription) authSubscription.unsubscribe();
       if (statusInterval) clearInterval(statusInterval);
-      supabase.removeChannel(newsChannel);
-      supabase.removeChannel(statusChannel);
-      supabase.removeChannel(contactChannel);
-      supabase.removeChannel(walletChannel);
-      supabase.removeChannel(rechargeChannel);
-      supabase.removeChannel(orderChannel);
-      supabase.removeChannel(carouselChannel);
+      supabase.removeChannel(dbChanges);
     };
-  }, [user?.id, siteSettings?.server_ip]);
+  }, [user?.id]); // Chỉ phụ thuộc vào user.id, bỏ siteSettings.server_ip để tránh loop
+
 
   return (
     <DataContext.Provider value={{
