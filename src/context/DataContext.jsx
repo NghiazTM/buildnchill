@@ -13,28 +13,50 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }) => {
-  const [news, setNews] = useState([]);
-  const [serverStatus, setServerStatus] = useState({
+  // Helper để lưu/lấy data từ localStorage giúp chống mất dữ liệu khi F5 hoặc để lâu
+  const getPersistedData = (key, defaultValue) => {
+    try {
+      const saved = localStorage.getItem(`bnc_${key}`);
+      return saved ? JSON.parse(saved) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const persistData = (key, data) => {
+    try {
+      localStorage.setItem(`bnc_${key}`, JSON.stringify(data));
+    } catch (err) {
+      console.error('Persist error:', err);
+    }
+  };
+
+  const [news, setNews] = useState(() => getPersistedData('news', []));
+  const [serverStatus, setServerStatus] = useState(() => getPersistedData('status', {
     status: 'Online',
     players: '0',
     maxPlayers: '500',
     version: '1.20.4'
-  });
-  const [contacts, setContacts] = useState([]);
-  const [siteSettings, setSiteSettings] = useState({
+  }));
+  const [contacts, setContacts] = useState(() => getPersistedData('contacts', []));
+  const [siteSettings, setSiteSettings] = useState(() => getPersistedData('settings', {
     server_ip: 'buildnchill.id.vn',
     server_version: '1.20.4',
     contact_email: 'admin@buildnchill.vn',
-    contact_phone: '',
-    discord_url: '',
-    site_title: 'BuildnChill',
-    maintenance_mode: false
-  });
-  const [carouselImages, setCarouselImages] = useState([]);
+    site_title: 'BuildnChill'
+  }));
+  const [carouselImages, setCarouselImages] = useState(() => getPersistedData('carousel', []));
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Sync state với localStorage mỗi khi thay đổi
+  useEffect(() => { persistData('news', news); }, [news]);
+  useEffect(() => { persistData('status', serverStatus); }, [serverStatus]);
+  useEffect(() => { persistData('contacts', contacts); }, [contacts]);
+  useEffect(() => { persistData('settings', siteSettings); }, [siteSettings]);
+  useEffect(() => { persistData('carousel', carouselImages); }, [carouselImages]);
 
   const fetchUserProfile = async (userId) => {
     if (!userId) {
@@ -147,22 +169,35 @@ export const DataProvider = ({ children }) => {
         carouselPromise
       ]);
 
-      if (newsRes.data) setNews(newsRes.data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
-      if (contactsRes.data) setContacts(contactsRes.data);
-      if (carouselRes.data) setCarouselImages(carouselRes.data);
+      // CHỈ CẬP NHẬT NẾU CÓ DỮ LIỆU TRẢ VỀ, KHÔNG OVERWRITE BẰNG NULL/EMPTY KHI LỖI
+      if (newsRes.data && newsRes.data.length > 0) {
+        setNews(newsRes.data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
+      }
+      
+      if (contactsRes.data && contactsRes.data.length > 0) {
+        setContacts(contactsRes.data);
+      }
+      
+      if (carouselRes.data && carouselRes.data.length > 0) {
+        setCarouselImages(carouselRes.data);
+      }
+      
       if (settingsRes.data) {
         setSiteSettings(settingsRes.data);
-        // Sau khi có settings (đặc biệt là server_ip), thử cập nhật trạng thái thực tế
         refreshMinecraftStatus(settingsRes.data.server_ip, profile);
       }
-      if (statusRes.data) setServerStatus({ 
-        status: statusRes.data.status, 
-        players: statusRes.data.players, 
-        maxPlayers: statusRes.data.max_players, 
-        version: statusRes.data.version 
-      });
+      
+      if (statusRes.data) {
+        setServerStatus({ 
+          status: statusRes.data.status, 
+          players: statusRes.data.players, 
+          maxPlayers: statusRes.data.max_players, 
+          version: statusRes.data.version 
+        });
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Data persistence layer: API fail, keeping existing state.', error);
+      // Giữ nguyên state cũ, không set về []
     }
   };
 
