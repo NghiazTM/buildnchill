@@ -149,6 +149,35 @@ const Shop = () => {
       } else {
         setShowSuccess(true);
         loadTopDonators();
+
+        // Gửi thông báo Discord khi mua bằng ví thành công
+        try {
+          const WEBHOOK_URL = import.meta.env.VITE_DISCORD_SHOP_WEBHOOK;
+          const embed = {
+            title: '💳 THÔNG BÁO MUA HÀNG QUA VÍ',
+            description: `Người chơi **${formData.mc_username}** vừa mua **${product.name}** thành công bằng số dư ví!`,
+            color: 0x10b981,
+            fields: [
+              { name: '👤 Người chơi', value: formData.mc_username, inline: true },
+              { name: '💰 Số tiền', value: `${product.price.toLocaleString('vi-VN')} VNĐ`, inline: true },
+              { name: '📦 Sản phẩm', value: product.name, inline: true },
+              { name: '💳 Phương thức', value: 'Số dư ví (Wallet)', inline: true }
+            ],
+            footer: { text: `BuildnChill System • ${new Date().toLocaleString('vi-VN')}` },
+            timestamp: new Date().toISOString()
+          };
+
+          fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: `📢 **${formData.mc_username}** vừa mua **${product.name}** (**${product.price.toLocaleString('vi-VN')}đ**) bằng ví! 🛒`,
+              embeds: [embed]
+            })
+          });
+        } catch (discordError) {
+          console.error('Discord Wallet Notify Error:', discordError);
+        }
       }
       setSubmitting(false);
       return;

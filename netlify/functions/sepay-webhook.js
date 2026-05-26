@@ -46,36 +46,44 @@ export const handler = async (event) => {
 
     console.log('Database Result:', JSON.stringify(data));
 
-    // Gửi thông báo Discord vào kênh BANK nếu nạp thành công
+    // Gửi thông báo Discord nếu xử lý thành công
     if (data && data.success) {
       try {
-        // Webhook URL cho kênh BANK
-        const BANK_WEBHOOK_URL = process.env.VITE_DISCORD_BANK_WEBHOOK;
+        const isRecharge = data.type === 'recharge';
+        const WEBHOOK_URL = isRecharge ? process.env.VITE_DISCORD_BANK_WEBHOOK : process.env.VITE_DISCORD_SHOP_WEBHOOK;
         
         const embed = {
-          title: '⚡ THÔNG BÁO NẠP TIỀN TỰ ĐỘNG',
-          description: `Người chơi **${data.username || 'Không rõ'}** vừa nạp tiền thành công qua SePay!`,
-          color: 0x0ea5e9, // Sky Blue
+          title: isRecharge ? '⚡ THÔNG BÁO NẠP TIỀN TỰ ĐỘNG' : '🛒 THÔNG BÁO MUA HÀNG TỰ ĐỘNG',
+          description: isRecharge 
+            ? `Người chơi **${data.username || 'Không rõ'}** vừa nạp tiền thành công qua SePay!`
+            : `Người chơi **${data.username || 'Không rõ'}** vừa mua **${data.product_name || 'vật phẩm'}** thành công!`,
+          color: isRecharge ? 0x0ea5e9 : 0x10b981, // Sky Blue vs Emerald Green
           fields: [
             { name: '👤 Người chơi', value: data.username || 'Không rõ', inline: true },
             { name: '💰 Số tiền', value: `${amount.toLocaleString('vi-VN')} VNĐ`, inline: true },
             { name: '📝 Nội dung', value: `\`${content}\``, inline: false },
             { name: '🆔 Mã giao dịch', value: `\`${transactionId || referenceCode}\``, inline: true }
           ],
-          footer: { text: `BuildnChill Payment System • ${new Date().toLocaleString('vi-VN')}` },
+          footer: { text: `BuildnChill System • ${new Date().toLocaleString('vi-VN')}` },
           timestamp: new Date().toISOString()
         };
 
-        await fetch(BANK_WEBHOOK_URL, {
+        if (!isRecharge && data.product_name) {
+          embed.fields.push({ name: '📦 Sản phẩm', value: data.product_name, inline: true });
+        }
+
+        await fetch(WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: `📢 **${data.username}** vừa nạp thành công **${amount.toLocaleString('vi-VN')}đ**! 🚀`,
+            content: isRecharge 
+              ? `📢 **${data.username}** vừa nạp thành công **${amount.toLocaleString('vi-VN')}đ** vào ví! 🚀`
+              : `📢 **${data.username}** vừa mua **${data.product_name}** (**${amount.toLocaleString('vi-VN')}đ**)! 🛒`,
             embeds: [embed]
           })
         });
       } catch (discordError) {
-        console.error('Discord Bank Log Error:', discordError);
+        console.error('Discord Log Error:', discordError);
       }
     }
 
