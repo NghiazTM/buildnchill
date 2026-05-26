@@ -381,23 +381,37 @@ a {
 
 @media (max-width: 768px) {
   .carousel-item img {
-    height: 250px !important; /* Fixed height for mobile to avoid being too tall */
+    height: 400px !important; /* Tăng nhẹ chiều cao để đủ chỗ chứa nội dung */
     object-position: center;
   }
 
   .carousel-caption {
-    padding-bottom: 1rem;
+    padding-bottom: 2rem;
+    left: 5% !important;
+    right: 5% !important;
   }
 
-  .carousel-caption h3 {
-    font-size: 1.2rem !important;
+  .carousel-caption h1, 
+  .carousel-caption h2,
+  .carousel-caption .display-4 {
+    font-size: 1.8rem !important;
+    margin-bottom: 0.5rem;
   }
 
   .carousel-caption p {
+    font-size: 0.85rem !important;
+    margin-bottom: 1rem;
+    line-height: 1.3;
+  }
+
+  .carousel-caption .summer-button {
+    padding: 8px 15px !important;
     font-size: 0.8rem !important;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  }
+
+  /* Thu nhỏ các icon trang trí bay lơ lửng trên mobile */
+  .summer-item {
+    font-size: 20px !important;
+    opacity: 0.2;
   }
 }
