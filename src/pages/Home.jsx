@@ -52,8 +52,8 @@ const Home = () => {
   return (
     <div className="shop-summer-container min-vh-100">
       <Helmet>
-        <title>BuildnChill - Máy Chủ Minecraft</title>
-        <meta name="description" content={`Chào mừng bạn đến với ${siteTitle}. Trải nghiệm mùa hè rực rỡ cùng server Minecraft Việt Nam chất lượng nhất.`} />
+        <title>BuildnChill - Server Minecraft Sinh Tồn Việt Nam 1.21.11</title>
+        <meta name="description" content="BuildnChill là máy chủ Minecraft Sinh Tồn Việt Nam 1.21.11 với trải nghiệm xây dựng, cày cuốc, chill cùng cộng đồng thân thiện. Gameplay mượt mà, không lag." />
       </Helmet>
 
       <SummerEffect />
@@ -71,7 +71,7 @@ const Home = () => {
               transition={{ duration: 1.5, ease: "easeOut" }}
             >
               <div className="position-absolute top-0 start-0 w-100 h-100" style={{ background: 'linear-gradient(to bottom, rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.3))', zIndex: 1 }}></div>
-              <img src={carouselImages[currentSlide]} alt={`Slide ${currentSlide + 1}`} className="carousel-image h-100" />
+              <img src={carouselImages[currentSlide]} alt={`BuildnChill Minecraft Server Việt Nam - Slide ${currentSlide + 1}`} className="carousel-image h-100" />
 
               <div className="position-absolute top-50 start-50 translate-middle text-center text-white w-100 px-3 mt-4" style={{ zIndex: 2 }}>
                 <motion.div
@@ -80,19 +80,19 @@ const Home = () => {
                   transition={{ delay: 0.5, duration: 0.8 }}
                 >
                   <div className="badge bg-info bg-opacity-90 text-white px-4 py-2 rounded-pill mb-4 shadow-lg fw-black tracking-widest">
-                    <BiStar className="me-2" /> NEW SEASON: OCEAN ADVENTURE
+                    <BiStar className="me-2" /> NEW SEASON: OCEAN ADVENTURE - MINECRAFT 1.21.11
                   </div>
                   <h1
                     className="display-1 fw-black text-white text-uppercase mb-4"
                     style={{ textShadow: '0 10px 30px rgba(0,0,0,0.6)', letterSpacing: '-2px' }}
                   >
-                    {siteTitle}
+                    BuildnChill Minecraft Việt Nam
                   </h1>
                   <p
                     className="h3 fw-bold mb-5 opacity-100"
                     style={{ textShadow: '0 2px 15px rgba(0,0,0,0.5)' }}
                   >
-                    Tham gia hành trình khám phá đại dương tại: <span className="text-info user-select-all px-3 py-1 rounded-pill" style={{ backgroundColor: 'var(--bg-card)' }}>{serverIp}</span>
+                    Server Minecraft Sinh Tồn cày cuốc hàng đầu tại: <span className="text-info user-select-all px-3 py-1 rounded-pill" style={{ backgroundColor: 'var(--bg-card)' }}>{serverIp}</span>
                   </p>
                   <div className="d-flex flex-wrap justify-content-center gap-4">
                     <Link to="/shop" className="summer-button w-auto px-5 py-3 h5 m-0 shadow-2xl">VÀO CỬA HÀNG NGAY 🛒</Link>
