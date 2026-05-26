@@ -368,50 +368,118 @@ a {
 }
 
 /* --- CAROUSEL / BANNER MOBILE OPTIMIZATION --- */
-.carousel {
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: var(--shadow-main);
+.hero-carousel {
+  min-height: 500px;
+  background: #0f172a;
 }
 
-.carousel-item img {
+.carousel-item img,
+.carousel-image {
   object-fit: cover;
-  height: 500px; /* Default Desktop height */
+  height: 500px;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
-  .carousel-item img {
-    height: 400px !important; /* Tăng nhẹ chiều cao để đủ chỗ chứa nội dung */
-    object-position: center;
+  .hero-carousel {
+    min-height: 650px !important;
+    height: auto !important;
+    display: flex;
+    flex-direction: column;
   }
 
-  .carousel-caption {
-    padding-bottom: 2rem;
-    left: 5% !important;
-    right: 5% !important;
+  .carousel-container,
+  .carousel-slide {
+    height: 650px !important;
   }
 
-  .carousel-caption h1, 
-  .carousel-caption h2,
-  .carousel-caption .display-4 {
-    font-size: 1.8rem !important;
-    margin-bottom: 0.5rem;
+  .carousel-image {
+    height: 650px !important;
+    filter: brightness(0.4); /* Làm tối nền hơn trên mobile để nổi bật chữ */
   }
 
-  .carousel-caption p {
-    font-size: 0.85rem !important;
-    margin-bottom: 1rem;
-    line-height: 1.3;
+  /* Chỉnh lại phần nội dung không dùng translate-middle để linh hoạt hơn */
+  .hero-carousel .translate-middle {
+    top: 55% !important;
+    transform: translate(-50%, -45%) !important;
+    padding: 0 20px !important;
+    width: 100% !important;
   }
 
-  .carousel-caption .summer-button {
-    padding: 8px 15px !important;
-    font-size: 0.8rem !important;
+  .hero-carousel .badge {
+    font-size: 0.7rem !important;
+    padding: 6px 12px !important;
+    margin-bottom: 1rem !important;
+    white-space: normal;
   }
 
-  /* Thu nhỏ các icon trang trí bay lơ lửng trên mobile */
+  .hero-carousel h1 {
+    font-size: 2.8rem !important;
+    line-height: 1.1;
+    margin-bottom: 1rem !important;
+    letter-spacing: -1px !important;
+  }
+
+  .hero-carousel p.h3 {
+    font-size: 1.1rem !important;
+    line-height: 1.5;
+    margin-bottom: 2rem !important;
+  }
+
+  /* Box chứa IP Server trên mobile */
+  .hero-carousel p.h3 span {
+    display: block !important;
+    width: fit-content;
+    margin: 10px auto 0 !important;
+    font-size: 1.2rem !important;
+    padding: 8px 20px !important;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+
+  /* Group nút bấm CTA */
+  .hero-carousel .d-flex.flex-wrap {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: center;
+  }
+
+  .hero-carousel .summer-button,
+  .hero-carousel .summer-button-outline {
+    width: 100% !important;
+    max-width: 280px;
+    margin: 0 !important;
+    padding: 12px 20px !important;
+    font-size: 0.9rem !important;
+    min-height: 50px;
+  }
+
+  /* Nút chuyển slide trên mobile */
+  .carousel-btn {
+    width: 40px !important;
+    height: 40px !important;
+    top: 50% !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+  
+  .carousel-btn svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* Icons trang trí lơ lửng */
   .summer-item {
-    font-size: 20px !important;
+    font-size: 30px !important;
     opacity: 0.2;
+    z-index: 1;
+  }
+
+  /* Section bên dưới */
+  .container.py-5 {
+    padding-top: 4rem !important;
+  }
+
+  .summer-title.display-4 {
+    font-size: 1.8rem !important;
   }
 }
