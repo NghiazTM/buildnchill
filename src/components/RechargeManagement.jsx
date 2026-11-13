@@ -1,185 +1,161 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BiCheck, BiX, BiSearch, BiTime, BiWallet, BiImage, BiRefresh } from 'react-icons/bi';
-import '../styles/summer-theme.css';
+import { BiCheck, BiX, BiSearch, BiImage, BiRefresh } from 'react-icons/bi';
+import { StatusBadge, useToast } from './ui';
+import { formatVnd, mcHead } from '../lib/api';
+
+const STATUS = {
+  pending: { label: 'Chờ duyệt', cls: 'pending' },
+  approved: { label: 'Đã duyệt', cls: 'approved' },
+  rejected: { label: 'Từ chối', cls: 'rejected' },
+};
+
+const FILTERS = [
+  { id: 'pending', label: 'Chờ duyệt' },
+  { id: 'approved', label: 'Đã duyệt' },
+  { id: 'rejected', label: 'Từ chối' },
+  { id: 'all', label: 'Tất cả' },
+];
 
 const RechargeManagement = () => {
+  const toast = useToast();
   const [recharges, setRecharges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('approved');
   const [selectedImage, setSelectedImage] = useState(null);
 
-  useEffect(() => {
-    fetchRecharges();
-  }, [filter]);
-
-  const fetchRecharges = async () => {
+  const fetchRecharges = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase
         .from('recharges')
-        .select(`
-          *,
-          user_profile:profiles!user_id (
-            username
-          )
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (filter !== 'all') {
-        query = query.eq('status', filter);
-      }
-
+        .select('*, user_profile:profiles!user_id ( username )')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (filter !== 'all') query = query.eq('status', filter);
       const { data, error } = await query;
       if (error) throw error;
       setRecharges(data || []);
     } catch (error) {
       console.error('Error fetching recharges:', error);
+      toast('Không tải được lịch sử nạp tiền', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, toast]);
+
+  useEffect(() => {
+    fetchRecharges();
+    const onUpdate = () => fetchRecharges();
+    window.addEventListener('recharge_updated', onUpdate);
+    return () => window.removeEventListener('recharge_updated', onUpdate);
+  }, [fetchRecharges]);
 
   const handleAction = async (recharge, status) => {
-    const actionText = status === 'approved' ? 'duyệt' : 'từ chối';
-    if (!window.confirm(`Bạn có chắc muốn ${actionText} yêu cầu này?`)) return;
-
+    const actionText = status === 'approved' ? 'duyệt và cộng tiền cho' : 'từ chối';
+    if (!window.confirm(`Bạn có chắc muốn ${actionText} yêu cầu ${formatVnd(recharge.amount)} của ${recharge.user_profile?.username}?`)) return;
     try {
       if (status === 'approved') {
-        const { error } = await supabase.rpc('approve_recharge', {
-          p_recharge_id: recharge.id,
-          p_admin_id: (await supabase.auth.getUser()).data.user.id
-        });
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase.rpc('approve_recharge', { p_recharge_id: recharge.id, p_admin_id: user.id });
         if (error) throw error;
+        toast('Đã duyệt và cộng tiền vào ví', 'success');
       } else {
-        const { error } = await supabase
-          .from('recharges')
-          .update({ status: 'rejected' })
-          .eq('id', recharge.id);
+        const { error } = await supabase.from('recharges').update({ status: 'rejected' }).eq('id', recharge.id);
         if (error) throw error;
+        toast('Đã từ chối yêu cầu', 'success');
       }
-
       fetchRecharges();
     } catch (error) {
-      alert('Lỗi: ' + error.message);
+      toast('Lỗi: ' + error.message, 'error');
     }
   };
 
-  const filteredRecharges = recharges.filter(r => 
-    r.user_profile?.username?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = recharges.filter((r) =>
+    (r.user_profile?.username || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const total = filtered.filter((r) => r.status === 'approved').reduce((s, r) => s + Number(r.amount || 0), 0);
 
   return (
-    <div className="recharge-management">
-      <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-info border-opacity-10">
-        <h3 className="fw-black text-primary m-0">QUẢN LÝ NẠP TIỀN</h3>
-        <button className="btn btn-light border text-primary rounded-3 shadow-sm" onClick={fetchRecharges}>
-          <BiRefresh size={22} />
-        </button>
+    <div>
+      <div className="bnc-admin-title">
+        <div>
+          <h2>Nạp tiền vào ví</h2>
+          <p>Giao dịch SePay (nội dung <code>NAP tên_tài_khoản</code>) được cộng tự động; yêu cầu thủ công chờ duyệt ở đây.</p>
+        </div>
+        <button className="bnc-icon-btn" onClick={fetchRecharges} aria-label="Làm mới"><BiRefresh size={18} /></button>
       </div>
 
-      <div className="summer-glass p-4 mb-4 border-0 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
-        <div className="row g-3 align-items-center">
-          <div className="col-12 col-md-5">
-            <div className="position-relative">
-              <BiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-primary opacity-50" size={20} />
-              <input 
-                type="text" 
-                className="summer-input ps-5 w-100 py-2" 
-                placeholder="Tìm tên người chơi..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="col-12 col-md-7 text-md-end">
-            <div className="d-flex flex-wrap justify-content-md-end gap-2">
-              {[
-                { id: 'pending', label: 'CHỜ DUYỆT ⏳' },
-                { id: 'approved', label: 'ĐÃ DUYỆT ✅' },
-                { id: 'rejected', label: 'TỪ CHỐI ❌' },
-                { id: 'all', label: 'TẤT CẢ' }
-              ].map(s => (
-                <button 
-                  key={s.id}
-                  onClick={() => setFilter(s.id)}
-                  className={`btn btn-sm rounded-pill px-3 fw-bold transition-all ${filter === s.id ? 'btn-primary text-white shadow-sm' : 'btn-outline-primary'}`}
-                  style={filter !== s.id ? { backgroundColor: 'var(--bg-card)' } : {}}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+      <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+        <div className="bnc-chip-row">
+          {FILTERS.map((s) => (
+            <button key={s.id} className={`bnc-chip ${filter === s.id ? 'active' : ''}`} onClick={() => setFilter(s.id)}>{s.label}</button>
+          ))}
+        </div>
+        <div className="d-flex gap-3 align-items-center">
+          <span className="small text-soft">Tổng đã duyệt: <b className="text-success">{formatVnd(total)}</b></span>
+          <div className="position-relative">
+            <BiSearch className="position-absolute text-dim" style={{ left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+            <input className="bnc-input py-2" style={{ paddingLeft: 34, width: 220 }} placeholder="Tìm người chơi..."
+              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </div>
       </div>
 
-      <div className="summer-glass overflow-hidden border-0 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
+      <div className="bnc-card">
         <div className="table-responsive">
-          <table className="table summer-table mb-0">
+          <table className="bnc-admin-table">
             <thead>
               <tr>
-                <th className="ps-4">THỜI GIAN</th>
-                <th>NGƯỜI CHƠI</th>
-                <th>SỐ TIỀN</th>
-                <th>PHƯƠNG THỨC</th>
-                <th className="text-center">MINH CHỨNG</th>
-                <th className="text-center">TRẠNG THÁI</th>
-                <th className="text-end pe-4">THAO TÁC</th>
+                <th>Thời gian</th>
+                <th>Người chơi</th>
+                <th className="text-end">Số tiền</th>
+                <th>Phương thức</th>
+                <th className="text-center">Minh chứng</th>
+                <th>Trạng thái</th>
+                <th className="text-end">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="7" className="text-center py-5"><div className="spinner-border text-primary border-3"></div></td></tr>
-              ) : filteredRecharges.length === 0 ? (
-                <tr><td colSpan="7" className="text-center py-5 fw-bold text-muted">Không tìm thấy yêu cầu nạp tiền nào. 🏖️</td></tr>
-              ) : filteredRecharges.map(r => (
-                <tr key={r.id}>
-                  <td className="ps-4 align-middle">
-                    <div className="small fw-bold text-muted">
+                <tr><td colSpan="7" className="bnc-empty"><div className="spinner-border text-primary" /></td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan="7" className="bnc-empty">Không có yêu cầu nạp tiền nào</td></tr>
+              ) : filtered.map((r) => {
+                const st = STATUS[r.status] || { label: r.status, cls: 'pending' };
+                return (
+                  <tr key={r.id}>
+                    <td className="small text-soft text-nowrap">
                       {new Date(r.created_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
-                    </div>
-                  </td>
-                  <td className="align-middle">
-                    <div className="d-flex align-items-center gap-2">
-                      <img src={`https://vzge.me/bust/${r.user_profile?.username}.png`} alt="Skin" style={{ width: '28px' }} />
-                      <span className="fw-bold text-dark">{r.user_profile?.username}</span>
-                    </div>
-                  </td>
-                  <td className="align-middle fw-black text-success fs-5">{r.amount.toLocaleString()}đ</td>
-                  <td className="align-middle">
-                    <span className="badge text-primary border border-info border-opacity-20 px-3 py-2 rounded-pill small fw-bold" style={{ backgroundColor: 'var(--bg-sand-light)' }}>
-                      {r.payment_method?.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="align-middle text-center">
-                    {r.proof_image ? (
-                      <button onClick={() => setSelectedImage(r.proof_image)} className="btn btn-sm btn-outline-info rounded-pill px-3 border-2 fw-bold" style={{ fontSize: '11px' }}>
-                        <BiImage className="me-1" /> XEM ẢNH
-                      </button>
-                    ) : <span className="text-muted small">N/A</span>}
-                  </td>
-                  <td className="align-middle text-center">
-                    <span className={`badge px-3 py-2 rounded-pill small fw-black ${
-                      r.status === 'pending' ? 'bg-warning bg-opacity-10 text-warning' : 
-                      r.status === 'approved' ? 'bg-success bg-opacity-10 text-success' : 
-                      'bg-danger bg-opacity-10 text-danger'
-                    }`}>
-                      {r.status === 'pending' ? 'CHỜ DUYỆT' : r.status === 'approved' ? 'ĐÃ DUYỆT' : 'ĐÃ TỪ CHỐI'}
-                    </span>
-                  </td>
-                  <td className="align-middle text-end pe-4">
-                    {r.status === 'pending' && (
-                      <div className="d-flex justify-content-end gap-2">
-                        <button onClick={() => handleAction(r, 'approved')} className="btn btn-sm btn-success rounded-circle p-2 shadow-sm" title="Duyệt"><BiCheck size={20} /></button>
-                        <button onClick={() => handleAction(r, 'rejected')} className="btn btn-sm btn-danger rounded-circle p-2 shadow-sm" title="Từ chối"><BiX size={20} /></button>
+                    </td>
+                    <td>
+                      <div className="d-flex align-items-center gap-2">
+                        <img className="avatar" src={mcHead(r.user_profile?.username, 32)} alt="" />
+                        <span className="fw-bold">{r.user_profile?.username || '—'}</span>
                       </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="text-end fw-black text-success">{formatVnd(r.amount)}</td>
+                    <td><span className="bnc-code">{r.payment_method || '—'}</span></td>
+                    <td className="text-center">
+                      {r.proof_image ? (
+                        <button className="bnc-btn bnc-btn-dark bnc-btn-sm" onClick={() => setSelectedImage(r.proof_image)}>
+                          <BiImage /> Xem
+                        </button>
+                      ) : <span className="text-dim small">—</span>}
+                    </td>
+                    <td><StatusBadge status={st.cls} label={st.label} /></td>
+                    <td className="text-end">
+                      {r.status === 'pending' && (
+                        <div className="d-inline-flex gap-2">
+                          <button className="bnc-icon-btn success" onClick={() => handleAction(r, 'approved')} title="Duyệt"><BiCheck size={18} /></button>
+                          <button className="bnc-icon-btn danger" onClick={() => handleAction(r, 'rejected')} title="Từ chối"><BiX size={18} /></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -187,16 +163,18 @@ const RechargeManagement = () => {
 
       <AnimatePresence>
         {selectedImage && (
-          <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center px-3" style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', zIndex: 10001, backdropFilter: 'blur(10px)' }} onClick={() => setSelectedImage(null)}>
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.8, opacity: 0 }}
+          <div className="bnc-overlay align-items-center" onClick={() => setSelectedImage(null)}>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
               className="position-relative"
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              <button onClick={() => setSelectedImage(null)} className="btn btn-danger rounded-circle position-absolute top-0 end-0 translate-middle shadow-lg" style={{ zIndex: 10 }}><BiX size={24} /></button>
-              <img src={selectedImage} alt="Proof" className="rounded-4 shadow-2xl overflow-hidden border border-5 border-white" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain' }} />
+              <button className="bnc-x position-absolute" style={{ top: -14, right: -14, zIndex: 2 }} onClick={() => setSelectedImage(null)} aria-label="Đóng">
+                <BiX size={20} />
+              </button>
+              <img src={selectedImage} alt="Minh chứng" className="rounded-4" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', border: '1px solid var(--bnc-border-strong)' }} />
             </motion.div>
           </div>
         )}

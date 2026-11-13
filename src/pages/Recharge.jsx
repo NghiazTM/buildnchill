@@ -1,296 +1,201 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BiPlusCircle, BiUpload, BiCheckCircle, BiInfoCircle, BiQrScan, BiCreditCard, BiWallet } from 'react-icons/bi';
-import SummerEffect from '../components/SummerEffect';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { BiCopy, BiQrScan, BiCheckCircle, BiTime, BiSupport, BiWallet, BiHistory } from 'react-icons/bi';
 import { useData } from '../context/DataContext';
-import { useNavigate } from 'react-router-dom';
-import '../styles/summer-theme.css';
+import { PageHero, Seo, Spinner, useCopy, useToast } from '../components/ui';
+import { formatVnd, mcHead } from '../lib/api';
+
+const PRESETS = [20000, 50000, 100000, 200000, 500000, 1000000];
+const MIN = 10000;
+
+const bank = {
+  code: import.meta.env.VITE_BANK_CODE || 'MB',
+  account: import.meta.env.VITE_BANK_ACCOUNT,
+  name: import.meta.env.VITE_BANK_NAME || 'MB Bank',
+  holder: import.meta.env.VITE_BANK_ACCOUNT_NAME,
+};
 
 const Recharge = () => {
   const navigate = useNavigate();
-  const { userProfile, isAuthenticated, loading } = useData();
-  const [uploading, setUploading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [rechargeForm, setRechargeForm] = useState({
-    amount: '',
-    payment_method: 'bank',
-    proof_image: null
-  });
-
-  const paymentInfo = {
-    bank_account: import.meta.env.VITE_BANK_ACCOUNT,
-    bank_name: import.meta.env.VITE_BANK_NAME,
-    account_name: import.meta.env.VITE_BANK_ACCOUNT_NAME
-  };
+  const { userProfile, isAuthenticated, authInitialized, user, fetchUserProfile } = useData();
+  const copy = useCopy();
+  const toast = useToast();
+  const [amount, setAmount] = useState(50000);
+  const [custom, setCustom] = useState('');
+  const [credited, setCredited] = useState(null);
+  const baseline = useRef(null);
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      navigate('/login');
+    if (authInitialized && !isAuthenticated) navigate('/login');
+  }, [authInitialized, isAuthenticated, navigate]);
+
+  // Phát hiện tiền vào: so sánh số dư với lúc mở trang
+  const balance = userProfile?.wallet_balance ?? null;
+  useEffect(() => {
+    if (balance === null) return;
+    if (baseline.current === null) { baseline.current = balance; return; }
+    if (balance > baseline.current) {
+      const diff = balance - baseline.current;
+      baseline.current = balance;
+      setCredited(diff);
+      toast(`Đã cộng ${formatVnd(diff)} vào ví!`, 'success', 5000);
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [balance, toast]);
 
-  const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      setRechargeForm({ ...rechargeForm, proof_image: e.target.files[0] });
-    }
-  };
+  // Dự phòng khi realtime không hoạt động: kiểm tra số dư mỗi 10 giây
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const t = setInterval(() => fetchUserProfile(user.id), 10000);
+    return () => clearInterval(t);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleRechargeSubmit = async (e) => {
-    e.preventDefault();
+  if (!authInitialized || !userProfile) return <div className="min-vh-100"><Spinner /></div>;
 
-    if (!isAuthenticated || !userProfile) {
-      alert('Vui lòng đăng nhập để nạp tiền!');
-      navigate('/login');
-      return;
-    }
-
-    if (!rechargeForm.amount) {
-      alert('Vui lòng nhập số tiền!');
-      return;
-    }
-
-    setUploading(true);
-    try {
-      let publicUrl = null;
-      if (rechargeForm.proof_image) {
-        const fileExt = rechargeForm.proof_image.name.split('.').pop();
-        const fileName = `${userProfile.id}-${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('recharges')
-          .upload(fileName, rechargeForm.proof_image);
-
-        if (uploadError) {
-          console.error('Supabase Storage Error:', uploadError);
-          throw new Error('Lỗi khi tải ảnh lên: ' + (uploadError.message || 'Không xác định'));
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('recharges')
-          .getPublicUrl(fileName);
-        publicUrl = urlData.publicUrl;
-      }
-
-      const { data: rechargeData, error: insertError } = await supabase
-        .from('recharges')
-        .insert({
-          user_id: userProfile.id,
-          amount: parseInt(rechargeForm.amount),
-          payment_method: rechargeForm.payment_method,
-          proof_image: publicUrl,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (insertError) throw new Error('Lỗi khi lưu yêu cầu: ' + insertError.message);
-
-      // Discord notification on submit
-      try {
-        const RECHARGE_WEBHOOK_URL = import.meta.env.VITE_DISCORD_BANK_WEBHOOK;
-        const embed = {
-          title: '💰 YÊU CẦU NẠP TIỀN MỚI',
-          description: `👤 Người chơi **${userProfile.username}** vừa gửi một yêu cầu nạp tiền!`,
-          color: 0x0ea5e9,
-          fields: [
-            { name: '👤 Người chơi', value: userProfile.username, inline: true },
-            { name: '💰 Số tiền', value: `${Number(rechargeForm.amount).toLocaleString('vi-VN')} VNĐ`, inline: true },
-            { name: '💳 Phương thức', value: 'Chuyển khoản (VietQR)', inline: true },
-            { name: '🆔 Mã yêu cầu', value: `\`${rechargeData.id}\`` }
-          ],
-          image: publicUrl ? { url: publicUrl } : null,
-          footer: { text: 'BuildnChill System - Summer Recharge' },
-          timestamp: new Date().toISOString()
-        };
-
-        await fetch(RECHARGE_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: '🔔 **YÊU CẦU NẠP TIỀN MỚI**',
-            embeds: [embed]
-          })
-        });
-      } catch (discordError) {
-        console.error('Discord notification error:', discordError);
-      }
-
-      setShowSuccess(true);
-      setRechargeForm({ amount: '', payment_method: 'bank', proof_image: null });
-    } catch (error) {
-      alert('Lỗi: ' + error.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  if (loading) return <div className="text-center py-5 mt-5"><div className="spinner-border text-info"></div></div>;
+  const value = custom ? Math.round(Number(custom)) : amount;
+  const valid = Number.isFinite(value) && value >= MIN;
+  const content = `NAP ${userProfile.username}`;
+  const qr = `https://img.vietqr.io/image/${bank.code}-${bank.account}-compact2.png?${new URLSearchParams({ amount: String(value), addInfo: content, accountName: bank.holder || '' })}`;
 
   return (
-    <div className="shop-summer-container min-vh-100">
-      <SummerEffect />
+    <>
+      <Seo title="Nạp tiền vào ví" path="/recharge" />
+      <PageHero
+        pill="Ví website"
+        title="Nạp tiền"
+        highlight="tự động"
+        subtitle="Quét mã QR — tiền được cộng vào ví trong vài giây, dùng để mua mọi vật phẩm chỉ với 1 cú nhấp."
+        crumbs={[{ label: 'Nạp tiền' }]}
+      />
 
-      {/* Summer Background Items */}
-      <div className="summer-item" style={{ top: '10%', left: '5%', fontSize: '50px' }}>🌴</div>
-      <div className="summer-item" style={{ bottom: '15%', right: '5%', fontSize: '40px' }}>🍹</div>
-      <div className="summer-item dolphin" style={{ top: '40%', right: '-30px' }}>🐬</div>
+      <section className="bnc-section pt-4">
+        <div className="container">
+          <div className="row g-4">
+            <div className="col-lg-7">
+              <div className="bnc-card bnc-card-pad h-100">
+                <div className="d-flex align-items-center gap-3 mb-4">
+                  <img src={mcHead(userProfile.username, 64)} alt="" width="56" height="56" style={{ borderRadius: 10 }} />
+                  <div className="flex-grow-1 min-w-0">
+                    <div className="text-dim small fw-bold text-uppercase">Tài khoản nhận</div>
+                    <div className="fw-black fs-5 text-truncate">{userProfile.username}</div>
+                  </div>
+                  <div className="text-end">
+                    <div className="text-dim small fw-bold text-uppercase">Số dư</div>
+                    <div className="fw-black fs-5 text-accent">{formatVnd(balance)}</div>
+                  </div>
+                </div>
 
-      <div className="container py-5 position-relative" style={{ zIndex: 10 }}>
-        <motion.div initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-center mb-5">
-          <h1 className="summer-title display-4 fw-black">NẠP TIỀN VÀO VÍ 🌊</h1>
-          <p className="lead fw-bold text-primary">Hệ thống cộng tiền tự động SePay 24/7 ✅</p>
-        </motion.div>
-
-        <div className="row g-4 justify-content-center">
-          {/* Instructions Column */}
-          <div className="col-lg-6">
-            <motion.div initial={{ x: -30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="summer-glass p-4 p-md-5 h-100 shadow-2xl border-0" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <h4 className="summer-label mb-4 d-flex align-items-center gap-2">
-                <BiQrScan /> QUÉT MÃ VIETQR ĐỂ NẠP TỰ ĐỘNG
-              </h4>
-
-              <div className="p-4 rounded-4 border-2 border-info border-dashed mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                <img
-                  src={`https://vzge.me/bust/${userProfile?.username}.png`}
-                  alt="avatar"
-                  className="rounded-4 shadow-lg mb-3 border border-3 border-info"
-                  style={{ width: '80px', height: '80px', objectFit: 'contain' }}
+                <label className="bnc-label">Chọn số tiền</label>
+                <div className="row g-2 mb-3">
+                  {PRESETS.map((p) => (
+                    <div className="col-4" key={p}>
+                      <button
+                        type="button"
+                        className={`bnc-tab w-100 ${!custom && amount === p ? 'active' : ''}`}
+                        onClick={() => { setAmount(p); setCustom(''); }}
+                      >
+                        {p >= 1000000 ? `${p / 1000000}M` : `${p / 1000}K`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <label className="bnc-label" htmlFor="custom-amount">Hoặc nhập số khác (VNĐ)</label>
+                <input
+                  id="custom-amount"
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN}
+                  step={1000}
+                  className="bnc-input fs-5 fw-black"
+                  placeholder={`Tối thiểu ${formatVnd(MIN)}`}
+                  value={custom}
+                  onChange={(e) => setCustom(e.target.value)}
                 />
-                <div className="fw-black h4 text-primary m-0">{userProfile?.username?.toUpperCase()}</div>
-                <div className="badge bg-info bg-opacity-10 text-info mt-2 px-3">TÀI KHOẢN THỤ HƯỞNG</div>
-              </div>
+                {custom && !valid && <div className="bnc-error mt-2">Số tiền tối thiểu {formatVnd(MIN)}</div>}
 
-              <div className="row g-4 mb-4">
-                <div className="col-md-12">
-                  <label className="summer-label text-center">NHẬP SỐ TIỀN MUỐN NẠP (VNĐ)</label>
-                  <input
-                    type="number"
-                    className="summer-input w-100 py-3 px-4 text-center fs-4 fw-black text-primary"
-                    placeholder="Ví dụ: 50000"
-                    value={rechargeForm.amount}
-                    onChange={e => setRechargeForm({ ...rechargeForm, amount: e.target.value })}
-                  />
-                  <div className="text-center small text-info mt-2 fw-bold">Tối thiểu: 1,000đ - Tự động cộng sau 30s - 1p</div>
-                </div>
-              </div>
+                <hr className="my-4" />
 
-              <div className="text-center py-2">
-                <AnimatePresence mode='wait'>
-                  {rechargeForm.amount && parseInt(rechargeForm.amount) >= 1000 ? (
-                    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}>
-                      <div className="position-relative d-inline-block p-3 rounded-4 shadow-xl border border-4 border-info border-opacity-20 mb-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                        <img
-                          src={`https://img.vietqr.io/image/MB-${paymentInfo.bank_account}-compact2.png?amount=${rechargeForm.amount}&addInfo=NAP ${userProfile?.username}&accountName=${paymentInfo.account_name}`}
-                          alt="VietQR"
-                          className="img-fluid"
-                          style={{ maxWidth: '280px' }}
-                        />
-                        <div className="position-absolute top-50 start-50 translate-middle opacity-10" style={{ zIndex: -1 }}>
-                          <BiQrScan size={150} />
+                <div className="row g-4 align-items-center">
+                  <div className="col-md-6 text-center">
+                    <AnimatePresence mode="wait">
+                      {valid && bank.account ? (
+                        <motion.div key={value} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                          <div className="bnc-qr"><img src={qr} alt={`QR nạp ${formatVnd(value)}`} /></div>
+                          <div className="small text-soft mt-3"><BiQrScan className="me-1" />Quét bằng app ngân hàng bất kỳ</div>
+                        </motion.div>
+                      ) : (
+                        <div className="bnc-card-flat bnc-empty">
+                          <BiQrScan size={56} className="mb-2" />
+                          <div>{bank.account ? 'Nhập số tiền để tạo mã QR' : 'Chưa cấu hình tài khoản nhận tiền'}</div>
                         </div>
-                      </div>
-                      <div className="p-3 bg-primary bg-opacity-10 rounded-4 border-2 border-primary border-dashed mb-4">
-                        <div className="x-small text-muted fw-bold mb-1">NỘI DUNG CHUYỂN KHOẢN (BẮT BUỘC):</div>
-                        <div className="h4 fw-black text-primary m-0 user-select-all">NAP {userProfile?.username}</div>
-                      </div>
-                      <div className="alert bg-success bg-opacity-10 border-success border-opacity-20 text-success fw-bold rounded-4 py-3">
-                        <BiCheckCircle className="me-2" size={22} />
-                        Hệ thống SePay sẽ tự động cộng tiền khi bạn chuyển khoản xong!
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <div className="p-5 rounded-4 border-2 border-dashed text-muted opacity-50" style={{ backgroundColor: 'var(--bg-sand-light)' }}>
-                      <BiQrScan size={80} className="mb-3 d-block mx-auto" />
-                      Vui lòng nhập số tiền để tạo mã QR nạp tự động
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="text-dim small fw-bold text-uppercase">Nội dung chuyển khoản (bắt buộc)</div>
+                    <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                      <span className="bnc-code-big" style={{ fontSize: '1.35rem', letterSpacing: '.04em' }}>{content}</span>
+                      <button className="bnc-copy" onClick={() => copy(content, 'Đã sao chép nội dung')}><BiCopy /></button>
                     </div>
-                  )}
-                </AnimatePresence>
+                    <div className="bnc-kv"><span className="k">Số tiền</span><span className="v text-accent">{valid ? formatVnd(value) : '—'}</span></div>
+                    <div className="bnc-kv"><span className="k">Ngân hàng</span><span className="v">{bank.name}</span></div>
+                    <div className="bnc-kv"><span className="k">Số TK</span><span className="v">{bank.account}<button className="bnc-copy" onClick={() => copy(bank.account, 'Đã sao chép số tài khoản')}><BiCopy /></button></span></div>
+                    <div className="bnc-kv"><span className="k">Chủ TK</span><span className="v">{bank.holder}</span></div>
+                    <div className="d-flex align-items-center gap-2 mt-3 small text-soft">
+                      <span className="bnc-pulse text-accent" /> Đang chờ giao dịch — số dư tự cập nhật.
+                    </div>
+                  </div>
+                </div>
               </div>
-            </motion.div>
-          </div>
+            </div>
 
-          {/* Guide Column */}
-          <div className="col-lg-5">
-            <motion.div initial={{ x: 30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="summer-glass p-4 p-md-5 h-100 shadow-2xl border-0" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <h4 className="summer-label mb-4 d-flex align-items-center gap-2">
-                <BiInfoCircle /> LƯU Ý KHI NẠP
-              </h4>
-
-              <div className="d-flex flex-column gap-4">
-                <div className="d-flex gap-3 align-items-center">
-                  <div className="d-flex align-items-center justify-content-center rounded-circle bg-info bg-opacity-10 text-info" style={{ width: '48px', height: '48px', flexShrink: 0 }}><BiCheckCircle size={24} /></div>
-                  <div>
-                    <h6 className="fw-black text-dark mb-1">Duyệt tự động 24/7</h6>
-                    <p className="small text-muted m-0">Tiền sẽ được cộng vào ví của bạn sau 30 giây đến 1 phút kể từ khi giao dịch thành công.</p>
-                  </div>
-                </div>
-
-                <div className="d-flex gap-3 align-items-center">
-                  <div className="d-flex align-items-center justify-content-center rounded-circle bg-warning bg-opacity-10 text-warning" style={{ width: '48px', height: '48px', flexShrink: 0 }}><BiInfoCircle size={24} /></div>
-                  <div>
-                    <h6 className="fw-black text-dark mb-1">Đúng nội dung chuyển khoản</h6>
-                    <p className="small text-muted m-0">Hãy đảm bảo nội dung chuyển khoản là <span className="fw-bold text-primary">NAP {userProfile?.username}</span> để hệ thống nhận diện được bạn.</p>
-                  </div>
-                </div>
-
-                <div className="d-flex gap-3 align-items-center">
-                  <div className="d-flex align-items-center justify-content-center rounded-circle bg-info bg-opacity-10 text-info" style={{ width: '48px', height: '48px', flexShrink: 0 }}><BiWallet size={24} /></div>
-                  <div>
-                    <h6 className="fw-black text-dark mb-1">Hỗ trợ nạp lỗi</h6>
-                    <p className="small text-muted m-0">Nếu sau 5 phút vẫn chưa thấy tiền, vui lòng liên hệ Admin qua Discord hoặc mục Liên hệ kèm ảnh biên lai.</p>
-                  </div>
-                </div>
-
-                <hr className="my-2 border-info border-opacity-20" />
-
-                <div className="p-4 rounded-4" style={{ backgroundColor: 'var(--bg-sand-light)' }}>
-                  <div className="small fw-bold text-muted mb-3 text-uppercase tracking-widest">Thông tin ngân hàng</div>
-                  <div className="d-flex flex-column gap-2">
-                    <div className="d-flex justify-content-between">
-                      <span className="text-muted">Ngân hàng:</span>
-                      <span className="fw-black text-dark">MB Bank</span>
+            <div className="col-lg-5">
+              <div className="bnc-card bnc-card-pad mb-4">
+                <div className="fw-black mb-3">Lưu ý khi nạp</div>
+                {[
+                  { icon: BiTime, t: 'Tự động 24/7', d: 'Tiền vào ví sau khoảng 10–60 giây kể từ khi ngân hàng báo thành công.' },
+                  { icon: BiCheckCircle, t: 'Đúng nội dung', d: <>Nội dung phải là <b className="text-accent">{content}</b> để hệ thống nhận diện tài khoản của bạn.</> },
+                  { icon: BiWallet, t: 'Dùng cho cửa hàng', d: 'Số dư ví dùng để mua mọi vật phẩm, giao ngay không cần chờ chuyển khoản.' },
+                  { icon: BiSupport, t: 'Gặp sự cố?', d: <>Sau 10 phút chưa nhận được tiền, hãy <Link to="/contact">liên hệ hỗ trợ</Link> kèm ảnh biên lai.</> },
+                ].map((it) => (
+                  <div className="d-flex gap-3 mb-3" key={it.t}>
+                    <div className="d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: 42, height: 42, background: 'var(--bnc-accent-soft)', color: 'var(--bnc-accent)', borderRadius: '.6rem' }}>
+                      <it.icon size={22} />
                     </div>
-                    <div className="d-flex justify-content-between">
-                      <span className="text-muted">Số tài khoản:</span>
-                      <span className="fw-black text-primary">0000865746243</span>
-                    </div>
-                    <div className="d-flex justify-content-between">
-                      <span className="text-muted">Chủ tài khoản:</span>
-                      <span className="fw-black text-dark">LE DUC TRONG</span>
+                    <div>
+                      <div className="fw-bold">{it.t}</div>
+                      <div className="small text-soft">{it.d}</div>
                     </div>
                   </div>
-                </div>
-
-                <button onClick={() => navigate('/profile')} className="summer-button w-100 py-3 mt-auto">
-                  XEM LỊCH SỬ BIẾN ĐỘNG VÍ →
-                </button>
+                ))}
               </div>
-            </motion.div>
+              <div className="d-grid gap-2">
+                <Link to="/shop" className="bnc-btn">Đến cửa hàng</Link>
+                <Link to="/profile#wallet" className="bnc-btn bnc-btn-dark"><BiHistory /> Lịch sử biến động ví</Link>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Success Modal */}
       <AnimatePresence>
-        {showSuccess && (
-          <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center px-3" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000 }}>
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="summer-glass p-5 text-center shadow-2xl" style={{ backgroundColor: 'var(--bg-card)', maxWidth: '450px' }}>
-              <div className="bg-success bg-opacity-10 p-4 rounded-circle d-inline-block mb-4 shadow-sm">
-                <BiCheckCircle size={80} className="text-success" />
-              </div>
-              <h2 className="summer-title mb-3">ĐÃ GỬI YÊU CẦU!</h2>
-              <p className="fw-bold text-primary mb-4">
-                Cảm ơn bạn đã nạp tiền. Vui lòng chờ 1-3 phút để hệ thống SePay tự động kiểm tra và cộng số dư vào ví của bạn.
-              </p>
-              <div className="d-grid gap-2">
-                <button onClick={() => navigate('/shop')} className="summer-button py-3">VỀ CỬA HÀNG 🛒</button>
-                <button onClick={() => setShowSuccess(false)} className="btn btn-link text-muted fw-bold text-decoration-none">ĐÓNG THÔNG BÁO</button>
+        {credited && (
+          <div className="bnc-overlay" style={{ alignItems: 'center' }} onMouseDown={(e) => e.target === e.currentTarget && setCredited(null)}>
+            <motion.div className="bnc-modal text-center" style={{ maxWidth: 420 }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="bnc-modal-body py-5">
+                <BiCheckCircle size={80} className="text-success mb-3" />
+                <h3 className="fw-black">Nạp tiền thành công!</h3>
+                <p className="text-soft">Đã cộng <b className="text-accent">{formatVnd(credited)}</b> vào ví. Số dư hiện tại: <b className="text-white">{formatVnd(balance)}</b></p>
+                <div className="d-grid gap-2 mt-4">
+                  <Link to="/shop" className="bnc-btn">Mua sắm ngay</Link>
+                  <button className="bnc-btn bnc-btn-dark" onClick={() => setCredited(null)}>Đóng</button>
+                </div>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

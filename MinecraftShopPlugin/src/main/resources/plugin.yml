@@ -1,6 +1,18 @@
 name: MinecraftShopPlugin
-version: 1.0.0
+version: ${project.version}
 main: com.buildnchill.shop.MinecraftShopPlugin
 api-version: 1.20
 author: BuildnChill
-description: Plugin tự động xử lý orders từ Supabase và thực thi commands trong game
+description: Tự động giao vật phẩm mua trên website BuildnChill vào game (qua Netlify plugin bridge)
+
+commands:
+  bncshop:
+    description: Quản lý BuildnChill Shop
+    usage: /<command> <status|reload|poll>
+    aliases: [bnc]
+    permission: bncshop.admin
+
+permissions:
+  bncshop.admin:
+    description: Dùng lệnh /bncshop
+    default: op

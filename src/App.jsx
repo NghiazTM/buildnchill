@@ -1,199 +1,88 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { DataProvider, useData } from './context/DataContext';
 import TopBar from './components/TopBar';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
+import { Spinner, ToastProvider } from './components/ui';
 import Home from './pages/Home';
 import About from './pages/About';
 import News from './pages/News';
 import NewsDetail from './pages/NewsDetail';
 import Contact from './pages/Contact';
 import Shop from './pages/Shop';
+import OrderStatus from './pages/OrderStatus';
 import Recharge from './pages/Recharge';
-import Admin from './pages/Admin';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
-import SummerEffect from './components/SummerEffect';
+import Rules from './pages/Rules';
+import Faq from './pages/Faq';
+import NotFound from './pages/NotFound';
 import 'react-quill/dist/quill.snow.css';
-import './styles.css';
-import './styles/custom.css'
-import './styles/carousel.css';
-import './styles/summer-theme.css';
+import './styles/sunstone.css';
+
+const Admin = lazy(() => import('./pages/Admin'));
+
+const Page = ({ children }) => (
+  <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeOut' }}>
+    {children}
+  </motion.div>
+);
+
+const ScrollReset = () => {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (hash) {
+      const el = document.getElementById(hash.slice(1));
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 80);
+        return;
+      }
+    }
+    window.scrollTo(0, 0);
+  }, [pathname, hash]);
+  return null;
+};
 
 const AppContent = () => {
-  const { isAuthenticated, siteSettings } = useData();
-
-  const pageVariants = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 }
-  };
-
-  const pageTransition = {
-    duration: 0.3,
-    ease: 'easeInOut'
-  };
+  const { isAuthenticated, userProfile, authInitialized } = useData();
+  const loader = <div className="min-vh-100"><Spinner /></div>;
 
   return (
-    <div className="App">
-      <SummerEffect />
-      <div className="ocean-waves"></div>
+    <div className="bnc-app">
+      <ScrollReset />
       <TopBar />
       <Navbar />
-      <main style={{ minHeight: '80vh' }}>
+      <main className="bnc-main">
         <Routes>
-          <Route
-            path="/"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Home />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/about"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <About />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/news"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <News />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/news/:slug"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <NewsDetail />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/contact"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Contact />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/shop"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Shop />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/recharge"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Recharge />
-              </motion.div>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <motion.div
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Profile />
-              </motion.div>
-            }
-          />
+          <Route path="/" element={<Page><Home /></Page>} />
+          <Route path="/about" element={<Page><About /></Page>} />
+          <Route path="/news" element={<Page><News /></Page>} />
+          <Route path="/news/:slug" element={<Page><NewsDetail /></Page>} />
+          <Route path="/rules" element={<Page><Rules /></Page>} />
+          <Route path="/faq" element={<Page><Faq /></Page>} />
+          <Route path="/contact" element={<Page><Contact /></Page>} />
+          <Route path="/shop" element={<Page><Shop /></Page>} />
+          <Route path="/shop/order/:id" element={<Page><OrderStatus /></Page>} />
+          <Route path="/recharge" element={<Page><Recharge /></Page>} />
+          <Route path="/profile" element={<Page><Profile /></Page>} />
           <Route
             path="/login"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/admin" replace />
-              ) : (
-                <motion.div
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  variants={pageVariants}
-                  transition={pageTransition}
-                >
-                  <Auth />
-                </motion.div>
-              )
-            }
+            element={!authInitialized ? loader : isAuthenticated ? <Navigate to="/" replace /> : <Page><Auth /></Page>}
           />
           <Route
             path="/admin"
             element={
-              isAuthenticated ? (
-                <motion.div
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  variants={pageVariants}
-                  transition={pageTransition}
-                >
-                  <Admin />
-                </motion.div>
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              !authInitialized ? loader
+                : isAuthenticated && userProfile?.role === 'admin' ? <Suspense fallback={loader}><Page><Admin /></Page></Suspense>
+                  : isAuthenticated && !userProfile ? loader
+                    : <Navigate to={isAuthenticated ? '/' : '/login'} replace />
             }
           />
+          <Route path="*" element={<Page><NotFound /></Page>} />
         </Routes>
       </main>
       <Footer />
@@ -206,9 +95,11 @@ function App() {
   return (
     <HelmetProvider>
       <DataProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <ToastProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </ToastProvider>
       </DataProvider>
     </HelmetProvider>
   );

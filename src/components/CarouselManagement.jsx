@@ -1,100 +1,86 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { BiPlus, BiTrash, BiEdit, BiSave, BiX, BiChevronUp, BiChevronDown, BiImageAdd } from 'react-icons/bi';
 import { supabase } from '../supabaseClient';
-import '../styles/summer-theme.css';
+import { StatusBadge, useToast } from './ui';
+
+const EMPTY = { image_url: '', display_order: 0, is_active: true };
 
 const CarouselManagement = () => {
+  const toast = useToast();
   const { carouselImages, addCarouselImage, updateCarouselImage, deleteCarouselImage } = useData();
-  const [isAdding, setIsAdding] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ image_url: '', display_order: 0, is_active: true });
+  const [formData, setFormData] = useState(EMPTY);
   const [imageFile, setImageFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (!imageFile) { setPreviewUrl(''); return undefined; }
+    const url = URL.createObjectURL(imageFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setImageFile(null);
+    setFormData({ ...EMPTY, display_order: carouselImages.length });
+    setShowModal(true);
+  };
+
+  const openEdit = (img) => {
+    setEditingId(img.id);
+    setImageFile(null);
+    setFormData({ image_url: img.image_url, display_order: img.display_order, is_active: img.is_active });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setImageFile(null);
+  };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Vui lòng chọn file ảnh!');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Kích thước ảnh tối đa 10MB!');
-        return;
-      }
-      setImageFile(file);
-    }
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Vui lòng chọn file ảnh', 'error'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast('Kích thước ảnh tối đa 10MB', 'error'); return; }
+    setImageFile(file);
   };
 
   const uploadImage = async () => {
     if (!imageFile) return formData.image_url;
+    const fileExt = imageFile.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+    const { error } = await supabase.storage.from('carousel_images').upload(fileName, imageFile, { cacheControl: '3600', upsert: true });
+    if (error) throw new Error('Lỗi tải ảnh: ' + error.message);
+    return supabase.storage.from('carousel_images').getPublicUrl(fileName).data.publicUrl;
+  };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!imageFile && !formData.image_url.trim()) { toast('Chọn ảnh hoặc dán link ảnh', 'error'); return; }
+    setUploading(true);
     try {
-      setUploading(true);
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const filePath = fileName;
-
-      const { error: uploadError } = await supabase.storage
-        .from('carousel_images')
-        .upload(filePath, imageFile, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (uploadError) {
-        console.error('Supabase Carousel Storage Error:', uploadError);
-        alert('Lỗi tải ảnh Carousel: ' + uploadError.message);
-        throw uploadError;
+      const image_url = await uploadImage();
+      const payload = { ...formData, image_url, display_order: Number(formData.display_order) || 0 };
+      const ok = editingId ? await updateCarouselImage(editingId, payload) : await addCarouselImage(payload);
+      if (ok) {
+        toast(editingId ? 'Đã cập nhật ảnh' : 'Đã thêm ảnh vào carousel', 'success');
+        closeModal();
+      } else {
+        toast('Không lưu được ảnh carousel', 'error');
       }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('carousel_images')
-        .getPublicUrl(filePath);
-
-      return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
+      console.error('Error saving carousel image:', error);
+      toast(error.message, 'error');
     } finally {
       setUploading(false);
     }
-  };
-
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    try {
-      const finalImageUrl = await uploadImage();
-      const success = await addCarouselImage({ ...formData, image_url: finalImageUrl });
-      if (success) {
-        setIsAdding(false);
-        setImageFile(null);
-        setFormData({ image_url: '', display_order: carouselImages.length, is_active: true });
-      }
-    } catch (error) {
-      console.error('Error adding carousel image:', error);
-    }
-  };
-
-  const handleUpdate = async (id) => {
-    try {
-      const finalImageUrl = await uploadImage();
-      const success = await updateCarouselImage(id, { ...formData, image_url: finalImageUrl });
-      if (success) {
-        setEditingId(null);
-        setImageFile(null);
-      }
-    } catch (error) {
-      console.error('Error updating carousel image:', error);
-    }
-  };
-
-  const startEdit = (img) => {
-    setEditingId(img.id);
-    setImageFile(null);
-    setFormData({ image_url: img.image_url, display_order: img.display_order, is_active: img.is_active });
   };
 
   const moveOrder = async (img, direction) => {
@@ -102,167 +88,48 @@ const CarouselManagement = () => {
     await updateCarouselImage(img.id, { display_order: newOrder });
   };
 
+  const toggleActive = async (img) => {
+    await updateCarouselImage(img.id, { is_active: !img.is_active });
+  };
+
+  const handleDelete = async (img) => {
+    if (!window.confirm('Xoá ảnh này khỏi carousel?')) return;
+    await deleteCarouselImage(img.id);
+  };
+
+  const preview = previewUrl || formData.image_url;
+
   return (
-    <div className="carousel-management">
-      <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-info border-opacity-10">
-        <h3 className="fw-black text-primary m-0">QUẢN LÝ CAROUSEL</h3>
-        <button 
-          className="summer-button py-2 px-4 shadow-sm"
-          onClick={() => {
-            setIsAdding(!isAdding);
-            setEditingId(null);
-            setFormData({ image_url: '', display_order: carouselImages.length, is_active: true });
-          }}
-        >
-          {isAdding ? <><BiX size={20} className="me-1" /> Hủy</> : <><BiPlus size={20} className="me-1" /> Thêm Ảnh</>}
-        </button>
+    <div>
+      <div className="bnc-admin-title">
+        <div>
+          <h2>Carousel trang chủ</h2>
+          <p>{carouselImages.length} ảnh • {carouselImages.filter((i) => i.is_active).length} đang hiển thị</p>
+        </div>
+        <button className="bnc-btn bnc-btn-sm" onClick={openAdd}><BiPlus size={18} /> Thêm ảnh</button>
       </div>
 
-      {isAdding && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="summer-glass p-4 mb-5 shadow-xl border-0"
-          style={{ backgroundColor: 'var(--bg-card)' }}
-        >
-          <form onSubmit={handleAdd}>
-            <div className="row g-4">
-              <div className="col-md-8">
-                <div className="mb-4">
-                  <label className="summer-label">HÌNH ẢNH CAROUSEL</label>
-                  <div className="d-flex flex-column gap-3">
-                    <input 
-                      type="file" 
-                      className="form-control" 
-                      accept="image/*" 
-                      onChange={handleImageChange} 
-                    />
-                    <div className="d-flex gap-2 align-items-center">
-                      <span className="text-muted small">Hoặc link:</span>
-                      <input 
-                        type="text" 
-                        className="summer-input flex-grow-1 py-1 px-3 small" 
-                        placeholder="Dán link ảnh tại đây..."
-                        value={formData.image_url}
-                        onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="summer-glass p-2 d-flex align-items-center justify-content-center overflow-hidden border-dashed" style={{ height: '120px', backgroundColor: 'var(--bg-sand-light)' }}>
-                  {(imageFile || formData.image_url) ? (
-                    <img 
-                      src={imageFile ? URL.createObjectURL(imageFile) : formData.image_url} 
-                      alt="Preview" 
-                      className="h-100 w-100 object-fit-cover rounded-3"
-                    />
-                  ) : (
-                    <div className="text-center text-muted">
-                      <BiImageAdd size={30} className="mb-1" />
-                      <p className="small m-0" style={{ fontSize: '10px' }}>PREVIEW</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="row g-4">
-              <div className="col-md-6 mb-3">
-                <label className="summer-label">THỨ TỰ HIỂN THỊ</label>
-                <input 
-                  type="number" 
-                  className="summer-input w-100" 
-                  value={formData.display_order}
-                  onChange={(e) => setFormData({...formData, display_order: parseInt(e.target.value)})}
-                />
-              </div>
-              <div className="col-md-6 mb-3 d-flex align-items-center">
-                <div className="form-check p-0 d-flex align-items-center gap-2">
-                  <input 
-                    className="form-check-input m-0" 
-                    type="checkbox" 
-                    id="isActiveCheck"
-                    style={{ width: '20px', height: '20px' }}
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                  />
-                  <label className="fw-bold text-primary mb-0" htmlFor="isActiveCheck">
-                    Hoạt động
-                  </label>
-                </div>
-              </div>
-            </div>
-            <button type="submit" className="summer-button w-100 py-3 mt-4" disabled={uploading}>
-              <BiSave size={20} className="me-1" /> {uploading ? 'ĐANG TẢI...' : 'LƯU ẢNH CAROUSEL'}
-            </button>
-          </form>
-        </motion.div>
-      )}
-
-      <div className="row g-4">
+      <div className="row g-3">
         {carouselImages.map((img) => (
           <div key={img.id} className="col-md-6 col-xl-4">
-            <div className="summer-glass p-0 overflow-hidden h-100 shadow-lg border-0 d-flex flex-column" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <div className="position-relative" style={{ height: '180px' }}>
-                <img 
-                  src={img.image_url} 
-                  className="w-100 h-100 object-fit-cover" 
-                  alt="Carousel" 
-                />
-                {!img.is_active && (
-                  <div className="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center">
-                    <span className="badge bg-danger px-3 py-2">ĐANG ẨN</span>
-                  </div>
-                )}
+            <div className="bnc-card h-100 d-flex flex-column overflow-hidden">
+              <div className="position-relative" style={{ height: 180, background: 'var(--bnc-bg-deep)' }}>
+                <img src={img.image_url} className="w-100 h-100 object-fit-cover" alt="Carousel"
+                  style={{ opacity: img.is_active ? 1 : 0.35 }} />
+                <div className="position-absolute top-0 start-0 m-2">
+                  <span className="bnc-code">#{img.display_order}</span>
+                </div>
               </div>
-              <div className="p-4 mt-auto">
-                {editingId === img.id ? (
-                  <div className="d-flex flex-column gap-3">
-                    <input 
-                      type="file" 
-                      className="form-control form-control-sm" 
-                      accept="image/*" 
-                      onChange={handleImageChange} 
-                    />
-                    <input 
-                      type="text" 
-                      className="summer-input w-100 py-2 small" 
-                      value={formData.image_url}
-                      onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-                      placeholder="Hoặc dán link..."
-                    />
-                    <div className="d-flex gap-2">
-                      <button className="summer-button py-2 flex-grow-1" onClick={() => handleUpdate(img.id)} disabled={uploading}>
-                        {uploading ? '...' : <BiSave size={18} />}
-                      </button>
-                      <button className="summer-button-outline py-2 flex-grow-1" onClick={() => { setEditingId(null); setImageFile(null); }}>
-                        <BiX size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <span className="badge bg-info px-3 me-2">VỊ TRÍ: {img.display_order}</span>
-                    </div>
-                    <div className="d-flex gap-1">
-                      <button className="btn btn-sm btn-light border" onClick={() => moveOrder(img, 'up')} title="Dịch lên">
-                        <BiChevronUp size={20} />
-                      </button>
-                      <button className="btn btn-sm btn-light border" onClick={() => moveOrder(img, 'down')} title="Dịch xuống">
-                        <BiChevronDown size={20} />
-                      </button>
-                      <button className="btn btn-sm btn-outline-info" onClick={() => startEdit(img)}>
-                        <BiEdit size={18} />
-                      </button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => deleteCarouselImage(img.id)}>
-                        <BiTrash size={18} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div className="p-3 mt-auto d-flex justify-content-between align-items-center gap-2">
+                <button type="button" className="border-0 bg-transparent p-0" onClick={() => toggleActive(img)} title="Bật/tắt hiển thị">
+                  <StatusBadge status={img.is_active ? 'delivered' : 'cancelled'} label={img.is_active ? 'Hiển thị' : 'Đang ẩn'} />
+                </button>
+                <div className="d-flex gap-1">
+                  <button className="bnc-icon-btn" onClick={() => moveOrder(img, 'up')} title="Dịch lên"><BiChevronUp size={18} /></button>
+                  <button className="bnc-icon-btn" onClick={() => moveOrder(img, 'down')} title="Dịch xuống"><BiChevronDown size={18} /></button>
+                  <button className="bnc-icon-btn" onClick={() => openEdit(img)} title="Sửa"><BiEdit /></button>
+                  <button className="bnc-icon-btn danger" onClick={() => handleDelete(img)} title="Xoá"><BiTrash /></button>
+                </div>
               </div>
             </div>
           </div>
@@ -270,10 +137,67 @@ const CarouselManagement = () => {
       </div>
 
       {carouselImages.length === 0 && (
-        <div className="text-center py-5 summer-glass border-dashed border-2" style={{ backgroundColor: 'rgba(255, 247, 230, 0.5)' }}>
-          <p className="fw-black text-muted m-0">Chưa có ảnh nào trong carousel. Vui lòng thêm ảnh mới. 🏝️</p>
-        </div>
+        <div className="bnc-card bnc-empty">Chưa có ảnh nào trong carousel. Bấm “Thêm ảnh” để bắt đầu.</div>
       )}
+
+      <AnimatePresence>
+        {showModal && (
+          <div className="bnc-overlay" onClick={closeModal}>
+            <motion.div
+              className="bnc-modal"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bnc-modal-head">
+                <h3>{editingId ? 'Sửa ảnh carousel' : 'Thêm ảnh carousel'}</h3>
+                <button className="bnc-x" onClick={closeModal} aria-label="Đóng"><BiX size={20} /></button>
+              </div>
+              <form className="bnc-modal-body" onSubmit={handleSubmit}>
+                <div className="rounded-3 overflow-hidden d-flex align-items-center justify-content-center mb-3"
+                  style={{ height: 180, background: 'var(--bnc-bg-deep)', border: '1px dashed var(--bnc-border-strong)' }}>
+                  {preview ? (
+                    <img src={preview} alt="Preview" className="w-100 h-100 object-fit-cover" />
+                  ) : (
+                    <div className="text-center text-dim"><BiImageAdd size={34} /><div className="small">Xem trước</div></div>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <label className="bnc-label">Tải ảnh lên</label>
+                  <input type="file" className="bnc-input" accept="image/*" onChange={handleImageChange} />
+                  <div className="bnc-help">Tối đa 10MB. Khuyến nghị tỉ lệ 16:9.</div>
+                </div>
+                <div className="mb-3">
+                  <label className="bnc-label">Hoặc link ảnh</label>
+                  <input type="text" className="bnc-input" placeholder="https://..." value={formData.image_url}
+                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} disabled={!!imageFile} />
+                </div>
+                <div className="row g-3 mb-4 align-items-end">
+                  <div className="col-6">
+                    <label className="bnc-label">Thứ tự hiển thị</label>
+                    <input type="number" className="bnc-input" value={formData.display_order}
+                      onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })} />
+                  </div>
+                  <div className="col-6">
+                    <div className="form-check form-switch custom-toggle-switch mb-2">
+                      <input className="form-check-input" type="checkbox" role="switch" id="carouselActive"
+                        checked={formData.is_active} onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })} />
+                      <label className="form-check-label fw-bold ms-2" htmlFor="carouselActive">Hiển thị</label>
+                    </div>
+                  </div>
+                </div>
+                <div className="d-flex gap-2">
+                  <button type="submit" className="bnc-btn flex-grow-1" disabled={uploading}>
+                    <BiSave /> {uploading ? 'Đang lưu...' : 'Lưu ảnh'}
+                  </button>
+                  <button type="button" className="bnc-btn bnc-btn-dark" onClick={closeModal}>Huỷ</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

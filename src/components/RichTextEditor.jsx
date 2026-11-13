@@ -3,10 +3,14 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import './RichTextEditor.css';
 import { supabase } from '../supabaseClient';
+import { useToast } from './ui';
 
 const RichTextEditor = ({ value, onChange, placeholder = 'Nhập nội dung...' }) => {
   const quillRef = useRef(null);
   const [showHtml, setShowHtml] = useState(false);
+  const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   const modules = useMemo(() => ({
     toolbar: {
@@ -33,7 +37,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Nhập nội dung...' 
             const file = input.files[0];
             if (file) {
               if (file.size > 10 * 1024 * 1024) {
-                alert('Kích thước ảnh tối đa 10MB!');
+                toastRef.current('Kích thước ảnh tối đa 10MB', 'error');
                 return;
               }
 
@@ -61,7 +65,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Nhập nội dung...' 
                 }
               } catch (error) {
                 console.error('Error uploading image to editor:', error);
-                alert('Lỗi khi tải ảnh lên: ' + error.message);
+                toastRef.current('Lỗi khi tải ảnh lên: ' + error.message, 'error');
               }
             }
           };
@@ -86,27 +90,14 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Nhập nội dung...' 
   return (
     <div className="rich-text-editor-wrapper">
       <div className="d-flex justify-content-end mb-2">
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-primary"
-          onClick={() => setShowHtml(!showHtml)}
-          style={{ fontSize: '0.75rem' }}
-        >
-          {showHtml ? '👁️ Xem kết quả' : '💻 Nhập mã HTML'}
+        <button type="button" className="rte-toggle" onClick={() => setShowHtml(!showHtml)}>
+          {showHtml ? 'Xem trình soạn thảo' : 'Sửa mã HTML'}
         </button>
       </div>
 
       {showHtml ? (
         <textarea
-          className="form-control"
-          style={{
-            minHeight: '300px',
-            fontFamily: 'monospace',
-            fontSize: '0.9rem',
-            backgroundColor: '#1a1a1a',
-            color: '#00ff00',
-            border: '2px solid #333'
-          }}
+          className="rte-html"
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Dán mã HTML vào đây..."

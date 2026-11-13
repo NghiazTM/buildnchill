@@ -1,282 +1,236 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { BiPlusCircle, BiLockAlt, BiLogOut, BiX, BiShieldQuarter, BiUser, BiReceipt, BiWallet, BiHistory } from 'react-icons/bi';
 import { supabase } from '../supabaseClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BiWallet, BiHistory, BiUser, BiPlusCircle, BiLogOut, BiX, BiUpload, BiCheckCircle, BiQrScan, BiCreditCard, BiLockAlt, BiShieldQuarter } from 'react-icons/bi';
-import SummerEffect from '../components/SummerEffect';
 import { useData } from '../context/DataContext';
-import { useNavigate } from 'react-router-dom';
-import '../styles/summer-theme.css';
+import { PageHero, Seo, Spinner, StatusBadge, useToast } from '../components/ui';
+import { formatVnd, mcBust, ORDER_STATUS } from '../lib/api';
+
+const TX_LABEL = { recharge: 'Nạp tiền', purchase: 'Mua hàng', admin_adjustment: 'Điều chỉnh', refund: 'Hoàn tiền' };
+const RC_LABEL = { pending: 'Đang chờ', approved: 'Thành công', rejected: 'Đã huỷ' };
+
+const TABS = [
+  { id: 'orders', label: 'Đơn hàng', icon: BiReceipt },
+  { id: 'wallet', label: 'Biến động ví', icon: BiWallet },
+  { id: 'recharges', label: 'Nạp tiền', icon: BiHistory },
+];
+
+const fmt = (d) => (d ? new Date(d).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { updatePassword, isAuthenticated, loading: authLoading } = useData();
-  const [profile, setProfile] = useState(null);
-  const [wallet, setWallet] = useState(null);
-  const [transactions, setTransactions] = useState([]);
+  const { hash } = useLocation();
+  const toast = useToast();
+  const { updatePassword, isAuthenticated, authInitialized, userProfile, logout } = useData();
+  const [tab, setTab] = useState(() => (TABS.some((t) => `#${t.id}` === hash) ? hash.slice(1) : 'orders'));
+  const [orders, setOrders] = useState([]);
+  const [txs, setTxs] = useState([]);
+  const [recharges, setRecharges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-
-  const [passwordForm, setPasswordForm] = useState({
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [updatingPassword, setUpdatingPassword] = useState(false);
-  const [rechargeHistory, setRechargeHistory] = useState([]);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState({ next: '', confirm: '' });
+  const [pwBusy, setPwBusy] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/login');
+    if (TABS.some((t) => `#${t.id}` === hash)) setTab(hash.slice(1));
+  }, [hash]);
+
+  useEffect(() => {
+    if (authInitialized && !isAuthenticated) navigate('/login');
+  }, [authInitialized, isAuthenticated, navigate]);
+
+  const load = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: wallet } = await supabase.from('wallets').select('id').eq('user_id', user.id).maybeSingle();
+    const [o, t, r] = await Promise.all([
+      supabase.from('orders').select('id, product, price, status, payment_method, payment_code, mc_username, created_at, delivered_at')
+        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
+      wallet
+        ? supabase.from('wallet_transactions').select('*').eq('wallet_id', wallet.id).order('created_at', { ascending: false }).limit(30)
+        : Promise.resolve({ data: [] }),
+      supabase.from('recharges').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
+    ]);
+    setOrders(o.data || []);
+    setTxs(t.data || []);
+    setRecharges(r.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    load();
+    const refresh = () => load();
+    window.addEventListener('wallet_updated', refresh);
+    window.addEventListener('recharge_updated', refresh);
+    window.addEventListener('orders_updated', refresh);
+    return () => {
+      window.removeEventListener('wallet_updated', refresh);
+      window.removeEventListener('recharge_updated', refresh);
+      window.removeEventListener('orders_updated', refresh);
+    };
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submitPw = async (e) => {
+    e.preventDefault();
+    if (pw.next.length < 6) return toast('Mật khẩu phải có ít nhất 6 ký tự', 'error');
+    if (pw.next !== pw.confirm) return toast('Mật khẩu xác nhận không khớp', 'error');
+    setPwBusy(true);
+    const ok = await updatePassword(pw.next);
+    setPwBusy(false);
+    if (ok) {
+      toast('Đổi mật khẩu thành công', 'success');
+      setPwOpen(false);
+      setPw({ next: '', confirm: '' });
     } else {
-      fetchUserData();
+      toast('Đổi mật khẩu thất bại, thử lại sau', 'error');
     }
-  }, [isAuthenticated, authLoading]);
-
-  const fetchUserData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const [prof, wal] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('wallets').select('*').eq('user_id', user.id).single()
-      ]);
-
-      setProfile(prof.data);
-      setWallet(wal.data);
-
-      if (wal.data) {
-        const [trans, recharges] = await Promise.all([
-          supabase.from('wallet_transactions')
-            .select('*')
-            .eq('wallet_id', wal.data.id)
-            .order('created_at', { ascending: false })
-            .limit(10),
-          supabase.from('recharges')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(10)
-        ]);
-        setTransactions(trans.data || []);
-        setRechargeHistory(recharges.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-    } finally {
-      setLoading(false);
-    }
+    return null;
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/';
+    await logout();
+    navigate('/');
   };
 
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('Mật khẩu xác nhận không khớp!');
-      return;
-    }
-    if (passwordForm.newPassword.length < 6) {
-      alert('Mật khẩu phải có ít nhất 6 ký tự!');
-      return;
-    }
+  if (!authInitialized || !userProfile) return <div className="min-vh-100"><Spinner /></div>;
 
-    setUpdatingPassword(true);
-    try {
-      const success = await updatePassword(passwordForm.newPassword);
-      if (success) {
-        alert('Cập nhật mật khẩu thành công!');
-        setShowPasswordModal(false);
-        setPasswordForm({ newPassword: '', confirmPassword: '' });
-      } else {
-        alert('Cập nhật mật khẩu thất bại.');
-      }
-    } catch (error) {
-      alert('Lỗi: ' + error.message);
-    } finally {
-      setUpdatingPassword(false);
-    }
-  };
-
-  if (loading || authLoading) return <div className="text-center py-5 mt-5"><div className="spinner-border text-info"></div></div>;
+  const spent = orders.filter((o) => ['paid', 'delivered'].includes(o.status)).reduce((s, o) => s + Number(o.price || 0), 0);
 
   return (
-    <div className="shop-summer-container min-vh-100">
-      <SummerEffect />
+    <>
+      <Seo title="Hồ sơ của bạn" />
+      <PageHero pill="Tài khoản" title="Xin chào," highlight={userProfile.username} subtitle="Quản lý ví, theo dõi đơn hàng và lịch sử giao dịch." crumbs={[{ label: 'Hồ sơ' }]} />
 
-      {/* Summer Background Items */}
-      <div className="summer-item" style={{ top: '15%', right: '10%', fontSize: '45px' }}>🐚</div>
-      <div className="summer-item dolphin" style={{ top: '25%', left: '-40px', animationDelay: '1s' }}>🐬</div>
-      <div className="summer-item" style={{ bottom: '10%', left: '5%', fontSize: '50px' }}>⛵</div>
+      <section className="bnc-section pt-4">
+        <div className="container">
+          <div className="row g-4">
+            <div className="col-lg-4">
+              <div className="bnc-card bnc-card-pad text-center" style={{ position: 'sticky', top: 100 }}>
+                <img src={mcBust(userProfile.username)} alt="" style={{ width: 120, height: 120, objectFit: 'contain' }} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/img/logo.png'; }} />
+                <h2 className="h4 fw-black mt-2 mb-2">{userProfile.username}</h2>
+                {userProfile.role === 'admin'
+                  ? <span className="bnc-status failed"><BiShieldQuarter /> Quản trị viên</span>
+                  : <span className="bnc-status pending"><BiUser /> Người chơi</span>}
 
-      <div className="container py-5 position-relative" style={{ zIndex: 10 }}>
-        <motion.div initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="mb-5 text-center">
-          <h1 className="summer-title display-4 fw-black">HỒ SƠ CỦA BẠN 🌊</h1>
-        </motion.div>
-
-        <div className="row g-4">
-          {/* User Info Card */}
-          <div className="col-lg-4">
-            <motion.div initial={{ x: -30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="summer-glass p-4 text-center sticky-top shadow-2xl border-0" style={{ top: '100px', backgroundColor: 'var(--bg-card)' }}>
-              <div className="mb-4 position-relative d-inline-block">
-                <div className="rounded-circle p-2 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <img
-                    src={`https://vzge.me/bust/${profile?.username}.png`}
-                    alt="avatar"
-                    className="rounded-circle shadow-inner border border-4 border-info"
-                    style={{ width: '120px', height: '120px', objectFit: 'contain' }}
-                  />
+                <div className="bnc-card-flat p-3 my-4">
+                  <div className="text-dim small fw-bold text-uppercase">Số dư ví</div>
+                  <div className="fw-black text-accent" style={{ fontSize: '2rem' }}>{formatVnd(userProfile.wallet_balance)}</div>
+                  <div className="small text-soft">Đã ủng hộ: <b className="text-white">{formatVnd(spent)}</b></div>
                 </div>
-                <div className="position-absolute bottom-0 end-0 bg-success border border-white border-3 rounded-circle" style={{ width: '25px', height: '25px', boxShadow: '0 0 15px rgba(25, 135, 84, 0.5)' }}></div>
+
+                <div className="d-grid gap-2">
+                  <Link to="/recharge" className="bnc-btn"><BiPlusCircle /> Nạp tiền vào ví</Link>
+                  <Link to="/shop" className="bnc-btn bnc-btn-ghost">Đến cửa hàng</Link>
+                  <button className="bnc-btn bnc-btn-dark" onClick={() => setPwOpen(true)}><BiLockAlt /> Đổi mật khẩu</button>
+                  <button className="bnc-btn bnc-btn-dark" onClick={handleLogout}><BiLogOut /> Đăng xuất</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-8">
+              <div className="bnc-tabs mb-4" role="tablist">
+                {TABS.map((t) => (
+                  <button key={t.id} id={t.id} role="tab" aria-selected={tab === t.id} className={`bnc-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+                    <t.icon className="me-1" /> {t.label}
+                  </button>
+                ))}
               </div>
 
-              <h3 className="fw-black text-primary mb-1">{profile?.username?.toUpperCase()}</h3>
-              <div className="d-flex align-items-center justify-content-center gap-2 mb-4">
-                {profile?.role === 'admin' ? (
-                  <span className="badge bg-danger px-3 py-2 rounded-pill d-flex align-items-center gap-1 shadow-sm">
-                    <BiShieldQuarter /> QUẢN TRỊ VIÊN
-                  </span>
-                ) : (
-                  <span className="badge bg-info px-3 py-2 rounded-pill d-flex align-items-center gap-1 shadow-sm text-white">
-                    <BiUser /> NGƯỜI CHƠI
-                  </span>
+              <div className="bnc-card bnc-card-pad">
+                {loading ? <Spinner /> : (
+                  <>
+                    {tab === 'orders' && (
+                      orders.length === 0 ? (
+                        <div className="bnc-empty">Bạn chưa có đơn hàng nào. <Link to="/shop">Mua sắm ngay →</Link></div>
+                      ) : (
+                        <div className="d-flex flex-column gap-2">
+                          {orders.map((o) => (
+                            <Link to={`/shop/order/${o.id}`} key={o.id} className="bnc-card-flat p-3 d-flex flex-wrap align-items-center gap-3 text-white bnc-card-hover">
+                              <div className="flex-grow-1 min-w-0">
+                                <div className="fw-black text-truncate">{o.product}</div>
+                                <div className="small text-dim">
+                                  {o.payment_code || o.id.slice(0, 8).toUpperCase()} • {o.mc_username} • {fmt(o.created_at)} • {o.payment_method === 'wallet' ? 'Ví' : 'Chuyển khoản'}
+                                </div>
+                              </div>
+                              <div className="fw-black text-accent">{formatVnd(o.price)}</div>
+                              <StatusBadge status={o.status} label={ORDER_STATUS[o.status] || o.status} pulse={['pending', 'paid'].includes(o.status)} />
+                            </Link>
+                          ))}
+                        </div>
+                      )
+                    )}
+
+                    {tab === 'wallet' && (
+                      <div className="table-responsive">
+                        <table className="table align-middle mb-0">
+                          <thead><tr><th className="text-dim small">Thời gian</th><th className="text-dim small">Loại</th><th className="text-dim small text-end">Số tiền</th><th className="text-dim small d-none d-md-table-cell">Ghi chú</th></tr></thead>
+                          <tbody>
+                            {txs.map((t) => (
+                              <tr key={t.id}>
+                                <td className="small text-soft">{fmt(t.created_at)}</td>
+                                <td><StatusBadge status={t.amount > 0 ? 'delivered' : 'failed'} label={TX_LABEL[t.type] || t.type} /></td>
+                                <td className={`text-end fw-black ${t.amount > 0 ? 'text-success' : 'text-danger'}`}>{t.amount > 0 ? '+' : ''}{formatVnd(t.amount)}</td>
+                                <td className="small text-soft d-none d-md-table-cell">{t.note}</td>
+                              </tr>
+                            ))}
+                            {txs.length === 0 && <tr><td colSpan="4" className="bnc-empty">Chưa có giao dịch nào.</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {tab === 'recharges' && (
+                      <div className="table-responsive">
+                        <table className="table align-middle mb-0">
+                          <thead><tr><th className="text-dim small">Thời gian</th><th className="text-dim small">Phương thức</th><th className="text-dim small text-end">Số tiền</th><th className="text-dim small text-end">Trạng thái</th></tr></thead>
+                          <tbody>
+                            {recharges.map((r) => (
+                              <tr key={r.id}>
+                                <td className="small text-soft">{fmt(r.created_at)}</td>
+                                <td className="small">{r.payment_method}</td>
+                                <td className="text-end fw-black text-accent">{formatVnd(r.amount)}</td>
+                                <td className="text-end"><StatusBadge status={r.status} label={RC_LABEL[r.status] || r.status} /></td>
+                              </tr>
+                            ))}
+                            {recharges.length === 0 && <tr><td colSpan="4" className="bnc-empty">Chưa có lần nạp nào. <Link to="/recharge">Nạp ngay →</Link></td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-
-              <div className="p-4 rounded-4 shadow-inner mb-4 border border-info border-opacity-20" style={{ backgroundColor: 'var(--bg-sand-light)' }}>
-                <div className="small text-muted mb-1 fw-bold text-uppercase tracking-wider">Số dư ví hiện tại</div>
-                <h2 className="text-info fw-black mb-0 display-6">{(wallet?.balance || 0).toLocaleString()} <small className="h5">VNĐ</small></h2>
-              </div>
-
-              <div className="d-grid gap-3">
-                <button onClick={() => navigate('/recharge')} className="summer-button py-3 shadow-lg"><BiPlusCircle className="me-2" /> NẠP TIỀN VÀO VÍ</button>
-                <button onClick={() => setShowPasswordModal(true)} className="summer-button py-2"><BiLockAlt className="me-2" /> ĐỔI MẬT KHẨU</button>
-                <button onClick={handleLogout} className="btn btn-link text-muted fw-bold text-decoration-none py-2 hover-text-danger"><BiLogOut className="me-1" /> Đăng xuất</button>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Activity Column */}
-          <div className="col-lg-8">
-            <div className="d-flex flex-column gap-4">
-              {/* Wallet History */}
-              <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="summer-glass p-4 p-md-5 shadow-2xl border-0 overflow-hidden position-relative" style={{ backgroundColor: 'var(--bg-card)' }}>
-                <h4 className="summer-label mb-4 d-flex align-items-center">
-                  <BiHistory size={28} className="me-2" /> LỊCH SỬ BIẾN ĐỘNG VÍ
-                </h4>
-                <div className="table-responsive">
-                  <table className="table table-hover align-middle custom-summer-table">
-                    <thead>
-                      <tr>
-                        <th>THỜI GIAN</th>
-                        <th>LOẠI</th>
-                        <th className="text-end">SỐ TIỀN</th>
-                        <th className="text-end">GHI CHÚ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((t) => (
-                        <tr key={t.id}>
-                          <td className="small fw-bold text-muted">{new Date(t.created_at).toLocaleString('vi-VN')}</td>
-                          <td>
-                            <span className={`badge rounded-pill px-3 ${t.amount > 0 ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'}`}>
-                              {t.type === 'recharge' ? 'Nạp tiền' : t.type === 'purchase' ? 'Mua hàng' : 'Khác'}
-                            </span>
-                          </td>
-                          <td className={`fw-black text-end ${t.amount > 0 ? 'text-success' : 'text-danger'}`}>
-                            {t.amount > 0 ? '+' : ''}{t.amount.toLocaleString()}đ
-                          </td>
-                          <td className="small text-end fw-bold text-primary">{t.note}</td>
-                        </tr>
-                      ))}
-                      {transactions.length === 0 && <tr><td colSpan="4" className="text-center py-5 text-muted fw-bold">Chưa có giao dịch nào 🏜️</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
-
-              {/* Recharge Status */}
-              <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="summer-glass p-4 p-md-5 shadow-2xl border-0">
-                <h4 className="summer-label mb-4 d-flex align-items-center">
-                  <BiCheckCircle size={28} className="me-2" /> TRẠNG THÁI NẠP TIỀN
-                </h4>
-                <div className="table-responsive">
-                  <table className="table table-hover align-middle custom-summer-table">
-                    <thead>
-                      <tr>
-                        <th>NGÀY GỬI</th>
-                        <th className="text-end">SỐ TIỀN</th>
-                        <th className="text-end">TRẠNG THÁI</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rechargeHistory.map((r) => (
-                        <tr key={r.id}>
-                          <td className="small fw-bold text-muted">{new Date(r.created_at).toLocaleDateString('vi-VN')}</td>
-                          <td className="fw-black text-end text-primary">{r.amount.toLocaleString()}đ</td>
-                          <td className="text-end">
-                            <span className={`badge rounded-pill px-3 py-2 ${r.status === 'pending' ? 'bg-warning text-dark' :
-                                r.status === 'approved' ? 'bg-success text-white' : 'bg-danger text-white'
-                              } shadow-sm`}>
-                              {r.status === 'pending' ? '⏳ Đang chờ' : r.status === 'approved' ? '✅ Thành công' : '❌ Đã hủy'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {rechargeHistory.length === 0 && <tr><td colSpan="3" className="text-center py-5 text-muted fw-bold">Không có yêu cầu nạp tiền 🏖️</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Password Modal */}
       <AnimatePresence>
-        {showPasswordModal && (
-          <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center px-3" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000 }}>
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="summer-glass p-4 p-md-5 w-100 shadow-2xl border-0" style={{ maxWidth: '450px' }}>
-              <div className="d-flex justify-content-between align-items-center mb-4">
-                <h4 className="summer-label m-0">ĐỔI MẬT KHẨU 🔑</h4>
-                <button onClick={() => setShowPasswordModal(false)} className="btn btn-link text-primary p-0"><BiX size={35} /></button>
+        {pwOpen && (
+          <div className="bnc-overlay" style={{ alignItems: 'center' }} onMouseDown={(e) => e.target === e.currentTarget && setPwOpen(false)}>
+            <motion.div className="bnc-modal" style={{ maxWidth: 440 }} initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="bnc-modal-head">
+                <h3>Đổi mật khẩu</h3>
+                <button className="bnc-x" onClick={() => setPwOpen(false)} aria-label="Đóng"><BiX size={22} /></button>
               </div>
-
-              <form onSubmit={handlePasswordSubmit} className="d-flex flex-column gap-4">
+              <form className="bnc-modal-body d-grid gap-3" onSubmit={submitPw}>
                 <div>
-                  <label className="summer-label">MẬT KHẨU MỚI</label>
-                  <input
-                    type="password"
-                    className="summer-input w-100"
-                    placeholder="Ít nhất 6 ký tự..."
-                    value={passwordForm.newPassword}
-                    onChange={e => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    required
-                  />
+                  <label className="bnc-label" htmlFor="pw-new">Mật khẩu mới</label>
+                  <input id="pw-new" type="password" className="bnc-input" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} placeholder="Ít nhất 6 ký tự" autoComplete="new-password" required />
                 </div>
                 <div>
-                  <label className="summer-label">XÁC NHẬN MẬT KHẨU</label>
-                  <input
-                    type="password"
-                    className="summer-input w-100"
-                    placeholder="Nhập lại mật khẩu..."
-                    value={passwordForm.confirmPassword}
-                    onChange={e => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    required
-                  />
+                  <label className="bnc-label" htmlFor="pw-confirm">Xác nhận mật khẩu</label>
+                  <input id="pw-confirm" type="password" className="bnc-input" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} autoComplete="new-password" required />
                 </div>
-                <button type="submit" disabled={updatingPassword} className="summer-button py-3 mt-2">
-                  {updatingPassword ? 'ĐANG CẬP NHẬT...' : 'CẬP NHẬT MẬT KHẨU 💾'}
-                </button>
+                <button type="submit" className="bnc-btn bnc-btn-block" disabled={pwBusy}>{pwBusy ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}</button>
               </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

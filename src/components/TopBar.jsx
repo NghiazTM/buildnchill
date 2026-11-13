@@ -1,83 +1,29 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { BiPhone, BiEnvelope, BiServer, BiCopyAlt } from 'react-icons/bi';
-import { FaDiscord } from 'react-icons/fa';
+import { Link } from 'react-router-dom';
+import { BiCopy } from 'react-icons/bi';
 import { useData } from '../context/DataContext';
+import { useCopy } from './ui';
 
+// Dải thông báo phía trên menu (theo phong cách Sunstone)
 const TopBar = () => {
-  const { siteSettings } = useData();
-  const [copied, setCopied] = useState('');
-
-  const copyToClipboard = (text, type) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(type);
-      setTimeout(() => setCopied(''), 2000);
-    });
-  };
+  const { siteSettings, serverStatus } = useData();
+  const copy = useCopy();
+  const ip = siteSettings?.server_ip || 'buildnchill.id.vn';
+  const online = serverStatus?.status === 'Online';
 
   return (
-    <motion.div
-      className="top-bar d-none d-lg-block"
-      initial={{ y: -50, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div className="container">
-        <div className="d-flex justify-content-between align-items-center flex-wrap">
-          <div className="d-flex gap-4 flex-wrap">
-            <motion.span
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <BiPhone className="me-2" />
-              <a href={`tel:${siteSettings?.contact_phone?.replace(/\s/g, '') || '+1234567890'}`}>
-                {siteSettings?.contact_phone || '+1 (234) 567-890'}
-              </a>
-            </motion.span>
-            <motion.span
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <BiEnvelope className="me-2" />
-              <a href={`mailto:${siteSettings?.contact_email || 'contact@buildnchill.com'}`}>
-                {siteSettings?.contact_email || 'contact@buildnchill.com'}
-              </a>
-            </motion.span>
-          </div>
-          <div className="d-flex gap-4 flex-wrap">
-            <motion.span
-              className="copy-btn"
-              onClick={() => copyToClipboard(siteSettings?.server_ip || 'play.buildnchill.com', 'ip')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <BiServer className="me-2 text-info" />
-              {siteSettings?.server_ip || 'play.buildnchill.com'}
-              {copied === 'ip' && (
-                <motion.span
-                  className="ms-2"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  style={{ color: '#10b981' }}
-                >
-                  ✓ Đã Sao Chép!
-                </motion.span>
-              )}
-            </motion.span>
-            <motion.a
-              href={siteSettings?.discord_url || 'https://discord.gg/buildnchill'}
-              target="_blank"
-              rel="noopener noreferrer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <FaDiscord className="me-2" />
-              Tham Gia Discord
-            </motion.a>
-          </div>
-        </div>
+    <div className="bnc-strip">
+      <div className="container bnc-strip-inner">
+        <span className="d-none d-md-inline">
+          ⚡ Mua vật phẩm — giao tự động vào game chỉ trong vài giây! <Link to="/shop" className="text-decoration-underline">Ghé cửa hàng →</Link>
+        </span>
+        <span className="d-flex align-items-center gap-3 ms-auto">
+          <span className="text-nowrap">{online ? <>● {serverStatus?.players || 0}<span className="d-none d-sm-inline"> người đang chơi</span><span className="d-sm-none"> online</span></> : <>● <span className="d-none d-sm-inline">Máy chủ đang </span>bảo trì</>}</span>
+          <button className="text-nowrap text-truncate" style={{ maxWidth: '62vw' }} onClick={() => copy(ip, 'Đã sao chép IP máy chủ')} title="Sao chép IP">
+            <BiCopy className="me-1" />{ip}
+          </button>
+        </span>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

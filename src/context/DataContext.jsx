@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { slugify } from '../utils/helpers';
+import { notifyDiscord } from '../lib/api';
 
 const DataContext = createContext();
 
@@ -15,6 +16,12 @@ export const useData = () => {
 export const DataProvider = ({ children }) => {
   // STALE TIME: 5 phút (300.000ms)
   const CACHE_STALE_TIME = 300000;
+  const isFetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
+  const isProfileFetchingRef = useRef(false);
+  const lastFocusTimeRef = useRef(0);
+  const userIdRef = useRef(null);
+  const isInitializingRef = useRef(false);
 
   // Helper để lưu/lấy data từ localStorage giúp chống mất dữ liệu khi F5 hoặc để lâu
   const getPersistedData = (key, defaultValue) => {
@@ -64,8 +71,17 @@ export const DataProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Global auth loading
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [mcStatusLoading, setMcStatusLoading] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [isDataStale, setIsDataStale] = useState(false);
+
+  // Cập nhật userIdRef khi user thay đổi
+  useEffect(() => {
+    userIdRef.current = user?.id || null;
+  }, [user]);
 
   // Sync state với localStorage mỗi khi thay đổi
   useEffect(() => { persistData('news', news); }, [news]);
@@ -79,32 +95,53 @@ export const DataProvider = ({ children }) => {
       setUserProfile(null);
       return null;
     }
+    
+    if (isProfileFetchingRef.current) {
+      console.log('[DATA] Profile fetch already in progress, skipping...');
+      return userProfile;
+    }
+
     try {
-      // Sử dụng select().eq().maybeSingle() để tránh lỗi nếu chưa có profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      isProfileFetchingRef.current = true;
+      setProfileLoading(true);
+      console.log(`[DATA] START Fetching profile for user: ${userId}`);
+      
+      const [profilePromise, walletPromise] = [
+        supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+        supabase.from('wallets').select('balance').eq('user_id', userId).maybeSingle()
+      ];
 
-      if (profileError) throw profileError;
+      const [profRes, walletRes] = await Promise.all([profilePromise, walletPromise]);
 
-      const { data: walletData } = await supabase
-        .from('wallets')
-        .select('balance')
-        .eq('user_id', userId)
-        .maybeSingle();
+      if (profRes.error) {
+        console.error('[DATA] Profile fetch error (URL: profiles/select):', profRes.error);
+        if (profRes.error.status === 401 || profRes.error.status === 403) {
+          console.error('[AUTH] Unauthorized detected during profile fetch, signing out...');
+          logout();
+        }
+      }
 
-      const fullProfile = profileData ? {
-        ...profileData,
-        wallet_balance: walletData?.balance || 0
-      } : null;
+      if (walletRes.error) {
+        console.warn('[DATA] Wallet fetch error (URL: wallets/select):', walletRes.error);
+      }
 
-      setUserProfile(fullProfile);
-      return fullProfile;
+      if (profRes.data) {
+        const fullProfile = {
+          ...profRes.data,
+          wallet_balance: walletRes.data?.balance || 0
+        };
+        setUserProfile(fullProfile);
+        console.log('[DATA] END Profile fetched successfully');
+        return fullProfile;
+      }
+      
+      return userProfile;
     } catch (err) {
-      console.error('Error fetching profile:', err);
-      return null;
+      console.error('[DATA] Unexpected error fetching profile:', err);
+      return userProfile;
+    } finally {
+      isProfileFetchingRef.current = false;
+      setProfileLoading(false);
     }
   };
 
@@ -169,44 +206,42 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const loadData = async (profile) => {
+  const loadData = async (profile, force = false) => {
+    // Prevent multiple concurrent fetches or too frequent fetches
+    const now = Date.now();
+    if (!force && (isFetchingRef.current || (now - lastFetchTimeRef.current < 15000))) {
+      console.log('[DATA] Data is still fresh or fetching in progress, skipping...');
+      return;
+    }
+
     try {
-      const newsPromise = supabase.from('news').select('*').eq('is_deleted', false).order('date', { ascending: false });
-      const settingsPromise = supabase.from('site_settings').select('*').eq('id', 1).maybeSingle();
-      const statusPromise = supabase.from('server_status').select('*').eq('id', 1).maybeSingle();
-      const contactsPromise = supabase.from('contacts').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
-      const carouselPromise = supabase.from('carousel_images').select('*').eq('is_active', true).order('display_order', { ascending: true });
+      isFetchingRef.current = true;
+      setDataLoading(true);
+      console.log('[DATA] START loading site data...');
+      
+      const [newsPromise, settingsPromise, statusPromise, contactsPromise, carouselPromise] = [
+        supabase.from('news').select('*').eq('is_deleted', false).order('date', { ascending: false }),
+        supabase.from('site_settings').select('*').eq('id', 1).maybeSingle(),
+        supabase.from('server_status').select('*').eq('id', 1).maybeSingle(),
+        supabase.from('contacts').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
+        supabase.from('carousel_images').select('*').eq('is_active', true).order('display_order', { ascending: true })
+      ];
 
       const [newsRes, settingsRes, statusRes, contactsRes, carouselRes] = await Promise.all([
-        newsPromise, 
-        settingsPromise, 
-        statusPromise,
-        contactsPromise,
-        carouselPromise
+        newsPromise, settingsPromise, statusPromise, contactsPromise, carouselPromise
       ]);
 
-      // Xử lý lỗi 401/403 tập trung
-      const results = [newsRes, settingsRes, statusRes, contactsRes, carouselRes];
-      const authError = results.find(r => r.error && (r.error.status === 401 || r.error.status === 403));
-      if (authError) {
-        console.error('Auth error detected, logging out...', authError.error);
-        logout();
-        return;
-      }
+      // Logging failures
+      if (newsRes.error) console.error('[DATA] News fetch error (URL: news/select):', newsRes.error);
+      if (settingsRes.error) console.error('[DATA] Settings fetch error (URL: site_settings/select):', settingsRes.error);
+      if (statusRes.error) console.error('[DATA] Server status fetch error (URL: server_status/select):', statusRes.error);
+      if (contactsRes.error) console.error('[DATA] Contacts fetch error (URL: contacts/select):', contactsRes.error);
+      if (carouselRes.error) console.error('[DATA] Carousel fetch error (URL: carousel_images/select):', carouselRes.error);
 
       // CHỈ CẬP NHẬT NẾU CÓ DỮ LIỆU TRẢ VỀ
-      if (newsRes.data) {
-        setNews(newsRes.data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
-      }
-      
-      if (contactsRes.data) {
-        setContacts(contactsRes.data);
-      }
-      
-      if (carouselRes.data) {
-        setCarouselImages(carouselRes.data);
-      }
-      
+      if (newsRes.data) setNews(newsRes.data.map(item => ({ ...item, slug: item.slug || slugify(item.title) })));
+      if (contactsRes.data) setContacts(contactsRes.data);
+      if (carouselRes.data) setCarouselImages(carouselRes.data);
       if (settingsRes.data) {
         setSiteSettings(settingsRes.data);
         refreshMinecraftStatus(settingsRes.data.server_ip, profile);
@@ -221,20 +256,38 @@ export const DataProvider = ({ children }) => {
         });
       }
       setIsDataStale(false);
+      lastFetchTimeRef.current = Date.now();
+      console.log('[DATA] END site data loaded successfully');
     } catch (error) {
-      console.error('API connection fail, using stale data.', error);
-      setIsDataStale(true); // Hiển thị cảnh báo dữ liệu cũ
+      console.error('[DATA] Unexpected loading error:', error);
+      setIsDataStale(true); 
+    } finally {
+      setDataLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   const refreshMinecraftStatus = async (ip, profile) => {
     const activeProfile = profile || userProfile;
-    const serverIp = ip || siteSettings?.server_ip || 'buildnchill.id.vn';
+    const serverIp = ip || siteSettings?.server_ip;
+    
+    if (!serverIp || serverIp === 'undefined') {
+      console.warn('[MC-API] Invalid server IP, skipping fetch');
+      return;
+    }
+
     try {
+      setMcStatusLoading(true);
+      console.log(`[MC-API] START Fetching status for: ${serverIp}`);
       const response = await fetch(`https://api.mcsrvstat.us/3/${serverIp}`);
-      const data = await response.json();
       
-      console.log('MC API Response:', data);
+      if (!response.ok) {
+        console.warn(`[MC-API] Failed to fetch MC status (URL: https://api.mcsrvstat.us/3/${serverIp}): ${response.status}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('[MC-API] Response received');
 
       if (data && data.online !== undefined) {
         const newStatus = {
@@ -251,13 +304,17 @@ export const DataProvider = ({ children }) => {
           version: newStatus.version
         });
 
-        // Chỉ Admin mới được quyền ghi đè trạng thái lên Database để tránh xung đột
+        // Chỉ Admin mới được quyền ghi đè trạng thái lên Database
+        // Cẩn thận loop: fetch -> update db -> realtime event -> set state -> render
         if (activeProfile?.role === 'admin') {
+          console.log('[MC-API] Admin detected, updating database status...');
           await supabase.from('server_status').update(newStatus).eq('id', 1);
         }
       }
     } catch (error) {
-      console.error('Error fetching Minecraft status:', error);
+      console.error('[MC-API] Error fetching Minecraft status:', error);
+    } finally {
+      setMcStatusLoading(false);
     }
   };
 
@@ -274,6 +331,7 @@ export const DataProvider = ({ children }) => {
         .select();
 
       if (error) throw error;
+      if (data?.[0]?.id) notifyDiscord('news_published', data[0].id);
       return true;
     } catch (error) {
       console.error('Error adding news:', error);
@@ -378,52 +436,8 @@ export const DataProvider = ({ children }) => {
       if (error) throw error;
       setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
 
-      // Discord notification update
-      const contact = contacts.find(c => c.id === id);
-      if (contact && contact.discord_message_id) {
-        const CONTACT_WEBHOOK_URL = import.meta.env.VITE_DISCORD_CONTACT_WEBHOOK;
-        
-        const statusLabel = status === 'resolved' ? 'Đã Giải Quyết' : 
-                           status === 'processing' ? 'Đang Kiểm Tra' : 'Đã Nhận';
-        const statusColor = status === 'resolved' ? 3066993 : 
-                           status === 'processing' ? 16766720 : 15158332;
-        const statusEmoji = status === 'resolved' ? '🟢' : 
-                           status === 'processing' ? '🟡' : '🔴';
-
-        const categoryLabel = contact.category === 'report' ? 'Báo Cáo (Report)' :
-                            contact.category === 'bug' ? 'Báo Lỗi (Bug)' :
-                            contact.category === 'help' ? 'Trợ Giúp (Help)' :
-                            contact.category === 'suggestion' ? 'Đề Xuất (Suggestion)' : 'Khác';
-
-        const embed = {
-          title: `${statusEmoji} ${statusLabel} | LIÊN HỆ: ${categoryLabel}`,
-          description: `🔔 **Yêu cầu hỗ trợ từ Website**`,
-          color: statusColor,
-          fields: [
-            { name: '👤 Người chơi', value: contact.ign || 'Không rõ', inline: true },
-            { name: '📂 Danh mục', value: categoryLabel, inline: true },
-            { name: '💬 Tin nhắn', value: contact.message || 'Không có nội dung' }
-          ],
-          footer: { text: `BuildnChill Support System • ${new Date(contact.created_at).toLocaleString('vi-VN')}` }
-        };
-
-        if (contact.image_url) {
-          embed.image = { url: contact.image_url };
-        }
-
-        try {
-          await fetch(`${CONTACT_WEBHOOK_URL}/messages/${contact.discord_message_id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              content: `🔔 <@741299302495813662> **CẬP NHẬT LIÊN HỆ [${statusLabel.toUpperCase()}]**`,
-              embeds: [embed] 
-            })
-          });
-        } catch (err) {
-          console.error('Error updating Discord message:', err);
-        }
-      }
+      // Cập nhật tin nhắn Discord (xử lý phía server)
+      notifyDiscord('contact_status', id);
 
       return true;
     } catch (error) {
@@ -544,50 +558,8 @@ export const DataProvider = ({ children }) => {
 
       if (error) throw error;
 
-      // Discord notification - Chạy ngầm để không làm chậm UI
-      (async () => {
-        try {
-          const CONTACT_WEBHOOK_URL = import.meta.env.VITE_DISCORD_CONTACT_WEBHOOK;
-          
-          const categoryLabel = contactData.category === 'report' ? 'Báo Cáo (Report)' :
-                              contactData.category === 'bug' ? 'Báo Lỗi (Bug)' :
-                              contactData.category === 'help' ? 'Trợ Giúp (Help)' :
-                              contactData.category === 'suggestion' ? 'Đề Xuất (Suggestion)' : 'Khác';
-  
-          const embed = {
-            title: `🔴 Đã Nhận | LIÊN HỆ: ${categoryLabel}`,
-            description: `🔔 **Yêu cầu hỗ trợ từ Website**`,
-            color: 15158332,
-            fields: [
-              { name: '👤 Người chơi', value: contactData.ign || 'Không rõ', inline: true },
-              { name: '📂 Danh mục', value: categoryLabel, inline: true },
-              { name: '💬 Tin nhắn', value: contactData.message || 'Không có nội dung' }
-            ],
-            footer: { text: `BuildnChill Support System • ${new Date().toLocaleString('vi-VN')}` }
-          };
-  
-          if (image_url) embed.image = { url: image_url };
-  
-          // Bỏ wait=true để Discord phản hồi nhanh hơn
-          const response = await fetch(CONTACT_WEBHOOK_URL + '?wait=true', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: `🔔 <@741299302495813662> **CÓ LIÊN HỆ MỚI!**`,
-              embeds: [embed]
-            })
-          });
-  
-          if (response.ok) {
-            const result = await response.json();
-            if (result.id) {
-              await supabase.from('contacts').update({ discord_message_id: result.id }).eq('id', data.id);
-            }
-          }
-        } catch (discordError) {
-          console.error('Discord notification background error:', discordError);
-        }
-      })();
+      // Thông báo Discord (xử lý phía server, không lộ webhook)
+      notifyDiscord('contact_new', data.id);
 
       return true;
     } catch (error) {
@@ -597,76 +569,110 @@ export const DataProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    let authSubscription = null;
     let statusInterval = null;
 
     const initializeAuth = async () => {
+      if (isInitializingRef.current) return;
+      isInitializingRef.current = true;
+      
       setLoading(true);
+      console.log('[AUTH] START Initializing session...');
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
-        let currentProfile = null;
         if (session?.user) {
+          console.log('[AUTH] Session found for user:', session.user.id);
+          userIdRef.current = session.user.id;
           setUser(session.user);
           setIsAuthenticated(true);
-          currentProfile = await fetchUserProfile(session.user.id);
+          setAuthInitialized(true); 
+          await fetchUserProfile(session.user.id);
         } else {
+          console.log('[AUTH] No active session.');
+          userIdRef.current = null;
           setUser(null);
           setIsAuthenticated(false);
           setUserProfile(null);
+          setAuthInitialized(true);
         }
         
-        // Chỉ load data một lần duy nhất khi khởi tạo hoặc khi user thay đổi (đăng nhập/đăng xuất)
-        await loadData(currentProfile);
+        loadData();
       } catch (err) {
-        console.error('Initialization error:', err);
+        console.error('[AUTH] Initialization error:', err);
+        setAuthInitialized(true); 
       } finally {
         setLoading(false);
+        isInitializingRef.current = false;
+        console.log('[AUTH] END Initialization lifecycle');
       }
 
-      // Tự động làm mới trạng thái server mỗi 5 phút (tăng thời gian để giảm tải)
       if (statusInterval) clearInterval(statusInterval);
       statusInterval = setInterval(() => {
         refreshMinecraftStatus();
       }, 300000);
-
-      // Thiết lập listener sau khi đã init xong
-      if (authSubscription) return; // Tránh tạo nhiều listener
-      
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        const currentUser = session?.user ?? null;
-        
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setUser(currentUser);
-          setIsAuthenticated(true);
-          await fetchUserProfile(currentUser.id);
-          await loadData(); // Load lại data khi user mới vào
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setIsAuthenticated(false);
-          setUserProfile(null);
-          setNews([]); // Clear data nhạy cảm
-          setContacts([]);
-          // Xóa toàn bộ cache khi logout để bảo mật
-          const publicKeys = ['news', 'status', 'settings', 'carousel'];
-          publicKeys.forEach(k => localStorage.removeItem(`bnc_pub_${k}`));
-        }
-        setLoading(false);
-      });
-      authSubscription = data.subscription;
     };
 
     initializeAuth();
 
-    // Tự động refetch khi window focus lại
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const currentUser = session?.user ?? null;
+      console.log(`[AUTH EVENT] ${event}`, { userId: currentUser?.id });
+      
+      if (event === 'SIGNED_IN') {
+        if (currentUser) {
+          // Check for change to prevent loops
+          if (userIdRef.current !== currentUser.id) {
+            console.log('[AUTH] Sign in detected for new user:', currentUser.id);
+            userIdRef.current = currentUser.id;
+            setUser(currentUser);
+            setIsAuthenticated(true);
+            // Không await truy vấn Supabase trong callback này: supabase-js giữ khoá auth khi phát sự kiện,
+            // gọi supabase.from() ở đây sẽ bị treo (deadlock) khi tải lại trang lúc đã đăng nhập.
+            setTimeout(async () => {
+              await fetchUserProfile(currentUser.id);
+              setAuthInitialized(true);
+            }, 0);
+          } else {
+            console.log('[AUTH] Sign in detected for existing user, skipping profile fetch.');
+          }
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        if (currentUser) {
+          userIdRef.current = currentUser.id;
+          setUser(currentUser);
+          setIsAuthenticated(true);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        console.log('[AUTH] User signed out, clearing session data.');
+        userIdRef.current = null;
+        setUser(null);
+        setIsAuthenticated(false);
+        setUserProfile(null);
+        setNews([]);
+        setContacts([]);
+        const publicKeys = ['news', 'status', 'settings', 'carousel'];
+        publicKeys.forEach(k => localStorage.removeItem(`bnc_pub_${k}`));
+        setAuthInitialized(true);
+      }
+    });
+
     const handleFocus = () => {
-      console.log('Window focused, checking for data updates...');
-      loadData();
+      const now = Date.now();
+      // Chỉ refetch nếu:
+      // 1. Đã login
+      // 2. Không đang loading/fetching
+      // 3. Đã qua ít nhất 30s kể từ lần focus cuối hoặc 15s kể từ lần fetch cuối
+      const timeSinceLastFocus = now - lastFocusTimeRef.current;
+      const timeSinceLastFetch = now - lastFetchTimeRef.current;
+      
+      if (timeSinceLastFocus > 30000 && timeSinceLastFetch > 15000 && !isFetchingRef.current) {
+        console.log('[DATA] Window focused and stale, checking for updates...');
+        loadData();
+      }
+      lastFocusTimeRef.current = now;
     };
     window.addEventListener('focus', handleFocus);
 
-    // CHỈ SỬ DỤNG REAL-TIME CHO NHỮNG THỨ CẦN THIẾT NHẤT
-    // Gom nhóm các table vào 1 channel để giảm số lượng WebSocket connections
     const dbChanges = supabase.channel('system_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'server_status' }, (payload) => {
         if (payload.new) {
@@ -679,9 +685,10 @@ export const DataProvider = ({ children }) => {
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, (payload) => {
-        const currentUserId = user?.id;
-        if (currentUserId && (payload.new.user_id === currentUserId || payload.old?.user_id === currentUserId)) {
-          fetchUserProfile(currentUserId);
+        const currentId = userIdRef.current;
+        if (payload.new && payload.new.user_id === currentId) {
+           console.log('[REALTIME] Wallet update for current user detected');
+           fetchUserProfile(currentId);
         }
         window.dispatchEvent(new CustomEvent('wallet_updated'));
       })
@@ -694,17 +701,18 @@ export const DataProvider = ({ children }) => {
       .subscribe();
 
     return () => {
-      if (authSubscription) authSubscription.unsubscribe();
+      if (authListener) authListener.subscription.unsubscribe();
       if (statusInterval) clearInterval(statusInterval);
+      window.removeEventListener('focus', handleFocus);
       supabase.removeChannel(dbChanges);
     };
-  }, [user?.id]); // Chỉ phụ thuộc vào user.id, bỏ siteSettings.server_ip để tránh loop
+  }, []); 
 
 
   return (
     <DataContext.Provider value={{
       news, serverStatus, contacts, siteSettings, carouselImages,
-      isAuthenticated, user, userProfile, loading,
+      isAuthenticated, user, userProfile, loading, authInitialized,
       fetchUserProfile, login, register, logout, refreshMinecraftStatus,
       addNews, updateNews, deleteNews, updateServerStatus, updateSiteSettings,
       markContactAsRead, updateContactStatus, deleteContact, submitContact,

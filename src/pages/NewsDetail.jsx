@@ -1,21 +1,29 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Helmet } from 'react-helmet-async';
+import { BiArrowBack, BiCalendar, BiTime, BiLink, BiShareAlt } from 'react-icons/bi';
+import { FaFacebookF } from 'react-icons/fa';
 import { useData } from '../context/DataContext';
-import { BiArrowBack, BiCalendar, BiTime, BiHash } from 'react-icons/bi';
-import SummerEffect from '../components/SummerEffect';
-import '../styles/summer-theme.css';
+import { PageHero, Seo, Spinner, useCopy } from '../components/ui';
 import 'react-quill/dist/quill.snow.css';
+import '../styles/pages.css';
+
+const FALLBACK = '/img/blog-cover.jpg';
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : '');
+const plain = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const onImgError = (e) => {
+  if (!e.currentTarget.src.endsWith(FALLBACK)) e.currentTarget.src = FALLBACK;
+};
 
 const NewsDetail = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { news } = useData();
+  const copy = useCopy();
   const [post, setPost] = useState(null);
 
   useEffect(() => {
-    const foundPost = news.find(p => p.slug === slug || p.id.toString() === slug);
+    const foundPost = news.find((p) => p.slug === slug || p.id.toString() === slug);
     if (foundPost) {
       setPost(foundPost);
     } else if (news.length > 0) {
@@ -23,87 +31,103 @@ const NewsDetail = () => {
     }
   }, [slug, navigate, news]);
 
+  const others = useMemo(() => news.filter((p) => p.id !== post?.id).slice(0, 4), [news, post]);
+  const readMinutes = useMemo(() => Math.max(1, Math.round(plain(post?.content).split(' ').length / 220)), [post]);
+
   if (!post) {
-    return (
-      <div className="shop-summer-container min-vh-100 d-flex align-items-center justify-content-center">
-        <div className="spinner-border text-info"></div>
-      </div>
-    );
+    return <div className="min-vh-100"><Spinner label="Đang tải bài viết..." /></div>;
   }
 
+  const url = typeof window !== 'undefined' ? window.location.href : `https://buildnchill.id.vn/news/${post.slug || post.id}`;
+
+  const share = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: post.title, url });
+        return;
+      } catch {
+        /* user cancelled */
+      }
+    }
+    copy(url, 'Đã sao chép liên kết bài viết');
+  };
+
   return (
-    <div className="shop-summer-container min-vh-100 py-5">
-      <SummerEffect />
-      <Helmet>
-        <title>{post.title} - BuildnChill Ocean</title>
-        <meta name="description" content={post.description || post.title} />
-      </Helmet>
+    <>
+      <Seo title={post.title} description={post.description || plain(post.content).slice(0, 160)} path={`/news/${post.slug || post.id}`} />
+      <PageHero
+        pill="Tin tức"
+        title={post.title}
+        crumbs={[{ label: 'Tin tức', to: '/news' }, { label: 'Bài viết' }]}
+      >
+        <div className="bnc-meta mt-3">
+          <span><BiCalendar /> {fmtDate(post.date)}</span>
+          <span><BiTime /> {readMinutes} phút đọc</span>
+        </div>
+      </PageHero>
 
-      <div className="container position-relative" style={{ zIndex: 10 }}>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="mb-4">
-            <Link to="/news" className="summer-button-outline py-2 px-4 rounded-pill d-inline-flex align-items-center gap-2 text-decoration-none">
-              <BiArrowBack size={20} /> QUAY LẠI TIN TỨC
-            </Link>
+      <section className="bnc-section pt-4">
+        <div className="container">
+          <div className="row g-4 g-lg-5">
+            <motion.div className="col-lg-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <div className="bnc-cover mb-4">
+                <img src={post.image || FALLBACK} alt={post.title} onError={onImgError} />
+              </div>
+
+              <article className="bnc-card bnc-card-pad">
+                {post.description && <p className="lead text-soft fw-semibold mb-4">{post.description}</p>}
+                <div className="ql-snow">
+                  <div className="ql-editor bnc-article" dangerouslySetInnerHTML={{ __html: post.content }} />
+                </div>
+
+                <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-5 pt-4 border-top">
+                  <Link to="/news" className="bnc-btn bnc-btn-dark bnc-btn-sm">
+                    <BiArrowBack /> Tất cả tin tức
+                  </Link>
+                  <div className="d-flex flex-wrap gap-2">
+                    <a
+                      className="bnc-btn bnc-btn-discord bnc-btn-sm"
+                      href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <FaFacebookF /> Facebook
+                    </a>
+                    <button className="bnc-btn bnc-btn-ghost bnc-btn-sm" onClick={() => copy(url, 'Đã sao chép liên kết bài viết')}>
+                      <BiLink /> Copy link
+                    </button>
+                    <button className="bnc-btn bnc-btn-sm" onClick={share}>
+                      <BiShareAlt /> Chia sẻ
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </motion.div>
+
+            <aside className="col-lg-4">
+              <div className="bnc-card bnc-card-pad mb-4" style={{ position: 'sticky', top: 100 }}>
+                <h2 className="h6 fw-black text-uppercase tracking-wide mb-3">Bài viết khác</h2>
+                {others.length === 0 && <div className="text-dim small">Chưa có bài viết khác.</div>}
+                {others.map((p) => (
+                  <Link key={p.id} to={`/news/${p.slug || p.id}`} className="bnc-side-post">
+                    <img src={p.image || FALLBACK} alt="" loading="lazy" onError={onImgError} />
+                    <span className="min-w-0">
+                      <span className="t">{p.title}</span>
+                      <span className="d-block text-dim small mt-1">{fmtDate(p.date)}</span>
+                    </span>
+                  </Link>
+                ))}
+                <div className="bnc-card-flat p-3 mt-4 text-center">
+                  <div className="fw-black mb-1">Ủng hộ máy chủ</div>
+                  <p className="text-soft small mb-3">Vật phẩm được giao tự động vào game chỉ trong vài giây.</p>
+                  <Link to="/shop" className="bnc-btn bnc-btn-sm bnc-btn-block">Ghé cửa hàng</Link>
+                </div>
+              </div>
+            </aside>
           </div>
-
-          <article className="summer-glass p-0 overflow-hidden shadow-2xl border-0 bg-white">
-            {/* Cover Image */}
-            <div className="position-relative" style={{ maxHeight: '500px', overflow: 'hidden' }}>
-              <img
-                src={post.image}
-                className="w-100 object-fit-cover"
-                alt={post.title}
-                style={{ minHeight: '300px', maxHeight: '500px' }}
-              />
-              <div className="position-absolute bottom-0 start-0 w-100 p-4 p-md-5" style={{ background: 'linear-gradient(to top, rgba(15, 23, 42, 0.8), transparent)' }}>
-                 <div className="badge bg-info px-3 py-2 rounded-pill mb-3 shadow-lg">SỰ KIỆN MỚI</div>
-                 <h1 className="text-white fw-black display-5 m-0" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>{post.title}</h1>
-              </div>
-            </div>
-
-            <div className="p-4 p-md-5">
-              <div className="d-flex flex-wrap gap-4 mb-5 pb-4 border-bottom border-info border-opacity-10">
-                <div className="d-flex align-items-center gap-2 fw-bold text-muted">
-                  <BiCalendar className="text-info" size={24} />
-                  <span>Ngày đăng: {new Date(post.date).toLocaleDateString('vi-VN')}</span>
-                </div>
-                <div className="d-flex align-items-center gap-2 fw-bold text-muted">
-                  <BiTime className="text-info" size={24} />
-                  <span>Thời gian đọc: 5 phút</span>
-                </div>
-                <div className="d-flex align-items-center gap-2 fw-bold text-muted">
-                  <BiHash className="text-info" size={24} />
-                  <span>BuildnChill Ocean</span>
-                </div>
-              </div>
-
-              <div className="news-content ql-snow">
-                <div 
-                   className="ql-editor p-0 fw-bold text-muted leading-relaxed" 
-                   style={{ fontSize: '1.15rem', color: '#475569' }}
-                   dangerouslySetInnerHTML={{ __html: post.content }} 
-                />
-              </div>
-
-              <div className="mt-5 pt-5 border-top border-info border-opacity-10 text-center">
-                 <h4 className="fw-black text-primary mb-4">CHIA SẺ TIN TỨC NÀY</h4>
-                 <div className="d-flex justify-content-center gap-3">
-                    <button className="summer-button py-2 px-4 shadow-sm" style={{ background: '#1877F2' }}>FACEBOOK</button>
-                    <button className="summer-button py-2 px-4 shadow-sm" style={{ background: '#25D366' }}>ZALO</button>
-                 </div>
-              </div>
-            </div>
-          </article>
-        </motion.div>
-      </div>
-
-      <div className="summer-item dolphin" style={{ top: '30%', right: '-30px' }}>🐬</div>
-    </div>
+        </div>
+      </section>
+    </>
   );
 };
 

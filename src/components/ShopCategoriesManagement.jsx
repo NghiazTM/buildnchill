@@ -1,49 +1,37 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { BiPlus, BiEdit, BiTrash, BiCheck, BiX } from 'react-icons/bi';
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { BiPlus, BiEdit, BiTrash, BiX } from 'react-icons/bi';
 import { supabase } from '../supabaseClient';
-import '../styles/summer-theme.css';
+import { StatusBadge, useToast } from './ui';
+
+const EMPTY = { name: '', description: '', icon: '', display_order: 0, active: true };
 
 const ShopCategoriesManagement = () => {
+  const toast = useToast();
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    icon: '',
-    display_order: 0,
-    active: true
-  });
+  const [formData, setFormData] = useState(EMPTY);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('is_deleted', false)
-        .order('display_order', { ascending: true });
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      alert('Lỗi tải danh sách danh mục: ' + error.message);
+  const loadCategories = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('display_order', { ascending: true });
+    if (error) {
+      toast('Lỗi tải danh mục: ' + error.message, 'error');
+      return;
     }
-  };
+    setCategories(data || []);
+  }, [toast]);
+
+  useEffect(() => { loadCategories(); }, [loadCategories]);
 
   const handleAddNew = () => {
     setEditingCategory(null);
-    setFormData({
-      name: '',
-      description: '',
-      icon: '',
-      display_order: categories.length,
-      active: true
-    });
+    setFormData({ ...EMPTY, display_order: categories.length });
     setShowModal(true);
   };
 
@@ -54,184 +42,149 @@ const ShopCategoriesManagement = () => {
       description: category.description || '',
       icon: category.icon || '',
       display_order: category.display_order || 0,
-      active: category.active !== false
+      active: category.active !== false,
     });
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Bạn có chắc muốn xóa danh mục này?')) return;
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update({ is_deleted: true })
-        .eq('id', id);
-      if (error) throw error;
-      alert('Đã xóa danh mục thành công!');
-      loadCategories();
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      alert('Lỗi xóa danh mục: ' + error.message);
+  const handleDelete = async (category) => {
+    if (!window.confirm(`Xoá danh mục "${category.name}"?`)) return;
+    const { error } = await supabase.from('categories').update({ is_deleted: true }).eq('id', category.id);
+    if (error) {
+      toast('Lỗi xoá danh mục: ' + error.message, 'error');
+      return;
     }
+    toast('Đã xoá danh mục', 'success');
+    loadCategories();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     try {
-      if (editingCategory) {
-        const { error } = await supabase
-          .from('categories')
-          .update(formData)
-          .eq('id', editingCategory.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('categories')
-          .insert([{ ...formData, is_deleted: false }]);
-        if (error) throw error;
-      }
-      alert(editingCategory ? 'Cập nhật danh mục thành công!' : 'Thêm danh mục thành công!');
+      const { error } = editingCategory
+        ? await supabase.from('categories').update(formData).eq('id', editingCategory.id)
+        : await supabase.from('categories').insert([{ ...formData, is_deleted: false }]);
+      if (error) throw error;
+      toast(editingCategory ? 'Đã cập nhật danh mục' : 'Đã thêm danh mục', 'success');
       setShowModal(false);
       loadCategories();
     } catch (error) {
-      console.error('Error saving category:', error);
-      alert('Lỗi lưu danh mục: ' + error.message);
+      toast('Lỗi lưu danh mục: ' + error.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="shop-categories-management">
-      <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-info border-opacity-10">
-        <h3 className="fw-black text-primary m-0">QUẢN LÝ DANH MỤC</h3>
-        <button
-          className="summer-button py-2 px-4 shadow-sm"
-          onClick={handleAddNew}
-        >
-          <BiPlus size={20} className="me-1" /> Thêm Danh Mục
-        </button>
+    <div>
+      <div className="bnc-admin-title">
+        <div>
+          <h2>Danh mục cửa hàng</h2>
+          <p>Nhóm sản phẩm hiển thị thành các tab trên trang Cửa hàng.</p>
+        </div>
+        <button className="bnc-btn bnc-btn-sm" onClick={handleAddNew}><BiPlus size={18} /> Thêm danh mục</button>
       </div>
 
-      <div className="summer-glass overflow-hidden border-0 shadow-lg mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+      <div className="bnc-card">
         <div className="table-responsive">
-          <table className="table summer-table mb-0">
+          <table className="bnc-admin-table">
             <thead>
               <tr>
-                <th className="ps-4">ICON</th>
-                <th>TÊN DANH MỤC</th>
-                <th>MÔ TẢ</th>
-                <th className="text-center">THỨ TỰ</th>
-                <th className="text-center">TRẠNG THÁI</th>
-                <th className="text-end pe-4">THAO TÁC</th>
+                <th>Icon</th>
+                <th>Tên danh mục</th>
+                <th>Mô tả</th>
+                <th className="text-center">Thứ tự</th>
+                <th>Trạng thái</th>
+                <th className="text-end">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {categories.map(category => (
-                <tr key={category.id}>
-                  <td className="ps-4 align-middle">
-                    <div className="rounded-3 p-1 d-flex align-items-center justify-content-center overflow-hidden" style={{ width: '40px', height: '40px', backgroundColor: 'var(--bg-sand-light)' }}>
-                      <span className="fs-5">{category.icon || '📦'}</span>
+              {categories.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <div className="rounded-3 d-flex align-items-center justify-content-center" style={{ width: 40, height: 40, background: 'var(--bnc-bg-deep)', border: '1px solid var(--bnc-border)' }}>
+                      <span className="fs-5">{c.icon || '📦'}</span>
                     </div>
                   </td>
-                  <td className="align-middle fw-bold text-dark">{category.name}</td>
-                  <td className="align-middle text-muted">{category.description || '-'}</td>
-                  <td className="align-middle text-center fw-bold">{category.display_order}</td>
-                  <td className="align-middle text-center">
-                    <span className={`badge rounded-pill ${category.active ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'}`}>
-                      {category.active ? 'Hoạt động' : 'Đang ẩn'}
-                    </span>
-                  </td>
-                  <td className="align-middle text-end pe-4">
-                    <div className="d-flex justify-content-end gap-2">
-                      <button className="btn btn-sm btn-info text-white rounded-circle p-2" onClick={() => handleEdit(category)}>
-                        <BiEdit size={16} />
-                      </button>
-                      <button className="btn btn-sm btn-danger rounded-circle p-2" onClick={() => handleDelete(category.id)}>
-                        <BiTrash size={16} />
-                      </button>
+                  <td className="fw-bold">{c.name}</td>
+                  <td className="small text-soft">{c.description || '—'}</td>
+                  <td className="text-center fw-bold">{c.display_order}</td>
+                  <td><StatusBadge status={c.active ? 'delivered' : 'cancelled'} label={c.active ? 'Hiển thị' : 'Đang ẩn'} /></td>
+                  <td className="text-end">
+                    <div className="d-inline-flex gap-2">
+                      <button className="bnc-icon-btn" onClick={() => handleEdit(c)} aria-label="Sửa"><BiEdit /></button>
+                      <button className="bnc-icon-btn danger" onClick={() => handleDelete(c)} aria-label="Xoá"><BiTrash /></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {categories.length === 0 && <tr><td colSpan="6" className="bnc-empty">Chưa có danh mục</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
-      {showModal && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center px-3" style={{ backgroundColor: 'rgba(15, 23, 42, 0.8)', zIndex: 9999, backdropFilter: 'blur(5px)' }} onClick={() => setShowModal(false)}>
-          <motion.div
-            className="summer-glass p-0 border-0 overflow-hidden shadow-2xl"
-            style={{ backgroundColor: 'var(--bg-card)', maxWidth: '600px', width: '100%' }}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 bg-primary d-flex justify-content-between align-items-center" style={{ color: '#fff' }}>
-              <h4 className="m-0 fw-black" style={{ color: '#fff' }}>{editingCategory ? 'SỬA DANH MỤC' : 'THÊM DANH MỤC MỚI'}</h4>
-              <button className="btn btn-link text-white p-0" onClick={() => setShowModal(false)}><BiX size={28} /></button>
-            </div>
-
-            <div className="p-4">
-              <form onSubmit={handleSubmit} id="categoryForm">
-                <div className="mb-4">
-                  <label className="summer-label">TÊN DANH MỤC *</label>
-                  <input type="text" className="summer-input w-100" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+      <AnimatePresence>
+        {showModal && (
+          <div className="bnc-overlay" onClick={() => setShowModal(false)}>
+            <motion.div
+              className="bnc-modal"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bnc-modal-head">
+                <h3>{editingCategory ? 'Sửa danh mục' : 'Thêm danh mục mới'}</h3>
+                <button className="bnc-x" onClick={() => setShowModal(false)} aria-label="Đóng"><BiX size={20} /></button>
+              </div>
+              <form className="bnc-modal-body" onSubmit={handleSubmit}>
+                <div className="mb-3">
+                  <label className="bnc-label">Tên danh mục *</label>
+                  <input type="text" className="bnc-input" value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
                 </div>
-                <div className="mb-4">
-                  <label className="summer-label">MÔ TẢ</label>
-                  <textarea className="summer-input w-100" rows="3" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Mô tả ngắn về danh mục này..." />
+                <div className="mb-3">
+                  <label className="bnc-label">Mô tả</label>
+                  <textarea className="bnc-textarea" rows="3" value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Mô tả ngắn về danh mục này..." />
                 </div>
-                <div className="mb-4">
-                  <label className="summer-label">ICON / EMOJI</label>
-                  <div className="d-flex gap-3 align-items-center">
-                    <div className="summer-glass p-1 d-flex align-items-center justify-content-center overflow-hidden" style={{ width: '60px', height: '60px', backgroundColor: 'var(--bg-sand-light)' }}>
-                      <span className="fs-3">{formData.icon || '📦'}</span>
+                <div className="mb-3">
+                  <label className="bnc-label">Icon / Emoji</label>
+                  <div className="d-flex gap-2 align-items-center">
+                    <div className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: 50, height: 50, background: 'var(--bnc-bg-deep)', border: '1px solid var(--bnc-border)' }}>
+                      <span className="fs-4">{formData.icon || '📦'}</span>
                     </div>
-                    <input type="text" className="summer-input flex-grow-1" value={formData.icon} onChange={(e) => setFormData({ ...formData, icon: e.target.value })} placeholder="Nhập Emoji (VD: ⚔️, 🛡️, 💎)..." />
+                    <input type="text" className="bnc-input" value={formData.icon}
+                      onChange={(e) => setFormData({ ...formData, icon: e.target.value })} placeholder="VD: ⚔️ 🛡️ 💎 👑" />
                   </div>
                 </div>
-                <div className="row g-4 mb-4">
-                  <div className="col-md-6">
-                    <label className="summer-label">THỨ TỰ HIỂN THỊ</label>
-                    <input type="number" className="summer-input w-100" value={formData.display_order} onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })} />
+                <div className="row g-3 mb-4 align-items-end">
+                  <div className="col-6">
+                    <label className="bnc-label">Thứ tự hiển thị</label>
+                    <input type="number" className="bnc-input" value={formData.display_order}
+                      onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })} />
                   </div>
-                  <div className="col-md-6 d-flex align-items-end">
-                    <div className="d-flex align-items-center gap-3 mb-2">
-                      <div className="custom-toggle-switch">
-                        <input
-                          type="checkbox"
-                          id="categoryActive"
-                          checked={formData.active}
-                          onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                        />
-                        <label htmlFor="categoryActive" />
-                      </div>
-                      <label className="fw-bold text-primary mb-0" htmlFor="categoryActive">Đang hoạt động</label>
+                  <div className="col-6">
+                    <div className="form-check form-switch custom-toggle-switch mb-2">
+                      <input className="form-check-input" type="checkbox" role="switch" id="categoryActive"
+                        checked={formData.active} onChange={(e) => setFormData({ ...formData, active: e.target.checked })} />
+                      <label className="form-check-label fw-bold ms-2" htmlFor="categoryActive">Hiển thị</label>
                     </div>
                   </div>
+                </div>
+                <div className="d-flex gap-2">
+                  <button type="submit" className="bnc-btn flex-grow-1" disabled={saving}>
+                    {saving ? 'Đang lưu...' : editingCategory ? 'Cập nhật danh mục' : 'Thêm danh mục'}
+                  </button>
+                  <button type="button" className="bnc-btn bnc-btn-dark" onClick={() => setShowModal(false)}>Huỷ</button>
                 </div>
               </form>
-            </div>
-
-            <div className="p-4 d-flex gap-3 border-top" style={{ backgroundColor: 'var(--bg-sand-light)' }}>
-              <button
-                type="submit"
-                form="categoryForm"
-                className="summer-button flex-grow-1 py-3"
-              >
-                {editingCategory ? 'CẬP NHẬT DANH MỤC' : 'THÊM DANH MỤC'}
-              </button>
-              <button
-                type="button"
-                className="summer-button-outline px-4 py-3"
-                onClick={() => setShowModal(false)}
-              >
-                HỦY
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

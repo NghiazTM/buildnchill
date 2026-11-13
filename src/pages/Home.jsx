@@ -1,224 +1,331 @@
-import { useState, useEffect } from 'react';
-import { useData } from '../context/DataContext';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Helmet } from 'react-helmet-async';
-import { BiCalendar, BiTime, BiChevronLeft, BiChevronRight, BiRocket, BiStar, BiTargetLock, BiMap } from 'react-icons/bi';
-import SummerEffect from '../components/SummerEffect';
-import '../styles/carousel.css';
-import '../styles/summer-theme.css';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  BiRocket, BiGroup, BiBuildings, BiShieldQuarter, BiCopy, BiRightArrowAlt, BiCalendar, BiStore,
+} from 'react-icons/bi';
+import { FaDiscord } from 'react-icons/fa';
+import { useData } from '../context/DataContext';
+import { supabase } from '../supabaseClient';
+import { Divider, SectionTitle, Seo, useCopy } from '../components/ui';
+import { formatVnd, mcHead } from '../lib/api';
+import { FEATURES, HOW_TO_JOIN } from '../data/siteContent';
+
+const ICONS = { BiRocket, BiGroup, BiBuildings, BiShieldQuarter };
+const FALLBACK_SLIDES = ['/og-image.jpg'];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 26 },
+  show: (i = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.5, delay: i * 0.08 } }),
+};
 
 const Home = () => {
-  const { news, serverStatus, siteSettings, carouselImages: dbCarouselImages } = useData();
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const { news, serverStatus, siteSettings, carouselImages } = useData();
+  const copy = useCopy();
+  const [slide, setSlide] = useState(0);
+  const [recent, setRecent] = useState([]);
+  const [products, setProducts] = useState([]);
 
-  const latestNews = news.slice(0, 3);
+  const ip = siteSettings?.server_ip || 'buildnchill.id.vn';
+  const title = siteSettings?.site_title || 'BuildnChill';
+  const online = serverStatus?.status === 'Online';
 
-  const siteTitle = siteSettings?.site_title || 'BuildnChill';
-  const serverIp = siteSettings?.server_ip || 'buildnchill.id.vn';
-
-  // Sử dụng ảnh từ database nếu có, ngược lại dùng ảnh mặc định
-  const carouselImages = dbCarouselImages && dbCarouselImages.length > 0
-    ? dbCarouselImages.filter(img => img.is_active).map(img => img.image_url)
-    : [
-      'https://media.discordapp.net/attachments/1318780761880658030/1467738661251580092/image.png?ex=698179a6&is=69802826&hm=ac1c46e7d28ebd7744c810b1e59f59e59eb24d55975d76d2627a642c0a2d117f&=&format=webp&quality=lossless',
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1353&q=80',
-      'https://images.unsplash.com/photo-1519046904884-53103b34b206?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80'
-    ];
+  const slides = useMemo(() => {
+    const imgs = (carouselImages || []).filter((i) => i.is_active !== false).map((i) => i.image_url).filter(Boolean);
+    return imgs.length ? imgs : FALLBACK_SLIDES;
+  }, [carouselImages]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % carouselImages.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [carouselImages.length]);
+    if (slides.length < 2) return undefined;
+    const t = setInterval(() => setSlide((s) => (s + 1) % slides.length), 5000);
+    return () => clearInterval(t);
+  }, [slides.length]);
 
-  const features = [
-    { icon: BiRocket, title: 'Tốc Độ Vượt Trội', description: 'Máy chủ cấu hình mạnh, giảm thiểu giật lag tối đa cho trải nghiệm mượt mà.' },
-    { icon: BiStar, title: 'Cộng Đồng Chất Lượng', description: 'Giao lưu cùng những người chơi văn minh, năng động và đầy sáng tạo.' },
-    { icon: BiMap, title: 'Thế Giới Rộng Lớn', description: 'Khám phá những hòn đảo bí ẩn và vùng biển vô tận trong mùa hè này.' }
-  ];
+  useEffect(() => {
+    let alive = true;
+    supabase.rpc('bnc_recent_purchases', { p_limit: 12 }).then(({ data }) => alive && data && setRecent(data));
+    supabase
+      .from('products')
+      .select('id, name, price, image_url, description')
+      .eq('active', true)
+      .eq('is_deleted', false)
+      .order('display_order')
+      .limit(4)
+      .then(({ data }) => alive && data && setProducts(data));
+    return () => { alive = false; };
+  }, []);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.2 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
-  };
+  const latestNews = (news || []).slice(0, 3);
 
   return (
-    <div className="shop-summer-container min-vh-100">
-      <Helmet>
-        <title>BuildnChill - Server Minecraft Sinh Tồn Việt Nam 1.21.11</title>
-        <meta name="description" content="BuildnChill là máy chủ Minecraft Sinh Tồn Việt Nam 1.21.11 với trải nghiệm xây dựng, cày cuốc, chill cùng cộng đồng thân thiện. Gameplay mượt mà, không lag." />
-      </Helmet>
+    <>
+      <Seo
+        title="Server Minecraft Sinh Tồn Việt Nam"
+        description="BuildnChill là máy chủ Minecraft Sinh Tồn Việt Nam: xây dựng, cày cuốc, chill cùng cộng đồng thân thiện. Gameplay mượt mà, cửa hàng giao vật phẩm tự động 24/7."
+        path="/"
+      />
 
-      <SummerEffect />
+      {/* ================= HERO ================= */}
+      <section className="bnc-hero">
+        <div className="container">
+          <div className="row align-items-center g-5">
+            <motion.div className="col-lg-7" initial="hidden" animate="show" variants={fadeUp}>
+              <span className="bnc-pill">Minecraft Server Việt Nam</span>
+              <h1>
+                Tham gia <span className="highlight">{title}</span>: Hành trình <span className="highlight">sinh tồn</span> mới đang chờ bạn!
+              </h1>
+              <p className="lead-text">
+                Khám phá thế giới rộng lớn, xây dựng cùng bạn bè và leo bảng xếp hạng trong máy chủ sinh tồn thân thiện nhất Việt Nam.
+              </p>
 
-      {/* Hero Section */}
-      <section className="hero-carousel position-relative overflow-hidden shadow-2xl">
-        <div className="carousel-container h-100">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentSlide}
-              className="carousel-slide h-100"
-              initial={{ opacity: 0, scale: 1.1 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-            >
-              <div className="position-absolute top-0 start-0 w-100 h-100" style={{ background: 'linear-gradient(to bottom, rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.3))', zIndex: 1 }}></div>
-              <img src={carouselImages[currentSlide]} alt={`BuildnChill Minecraft Server Việt Nam - Slide ${currentSlide + 1}`} className="carousel-image h-100" />
+              <div className="d-flex flex-wrap gap-3 mt-4">
+                <button className="bnc-btn" onClick={() => copy(ip, `Đã sao chép IP: ${ip}`)}>
+                  <span className="sq">■</span> Copy IP
+                </button>
+                <Link to="/shop" className="bnc-btn bnc-btn-ghost">
+                  <span className="sq">■</span> Vào cửa hàng
+                </Link>
+                <a href={siteSettings?.discord_url || 'https://discord.gg/buildnchill'} target="_blank" rel="noopener noreferrer" className="bnc-btn bnc-btn-discord">
+                  <FaDiscord /> Discord
+                </a>
+              </div>
 
-              <div className="position-absolute top-50 start-50 translate-middle text-center text-white w-100 px-3 mt-4" style={{ zIndex: 2 }}>
-                <motion.div
-                  initial={{ y: 50, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.5, duration: 0.8 }}
-                >
-                  <div className="badge bg-info bg-opacity-90 text-white px-4 py-2 rounded-pill mb-4 shadow-lg fw-black tracking-widest">
-                    <BiStar className="me-2" /> NEW SEASON: OCEAN ADVENTURE - MINECRAFT 1.21.11
+              <div className="bnc-ip-box">
+                <span className="text-dim small fw-bold text-uppercase">IP</span>
+                <code>{ip}</code>
+                <button className="bnc-copy" onClick={() => copy(ip, 'Đã sao chép IP')} aria-label="Sao chép IP"><BiCopy /></button>
+              </div>
+
+              <div className="row g-3 mt-3">
+                <div className="col-sm-4 col-12">
+                  <div className="bnc-feature-box">
+                    <p className="num"><span className={`dot ${online ? 'dot-green' : 'dot-red'}`} />{online ? (serverStatus?.players || 0) : 'Offline'}</p>
+                    <p className="lbl">Đang online</p>
                   </div>
-                  <h1
-                    className="display-1 fw-black text-white text-uppercase mb-4"
-                    style={{ textShadow: '0 10px 30px rgba(0,0,0,0.6)', letterSpacing: '-2px' }}
-                  >
-                    BuildnChill Minecraft Việt Nam
-                  </h1>
-                  <p
-                    className="h3 fw-bold mb-5 opacity-100"
-                    style={{ textShadow: '0 2px 15px rgba(0,0,0,0.5)' }}
-                  >
-                    Server Minecraft Sinh Tồn cày cuốc hàng đầu tại: <span className="text-info user-select-all px-3 py-1 rounded-pill" style={{ backgroundColor: 'var(--bg-card)' }}>{serverIp}</span>
-                  </p>
-                  <div className="d-flex flex-wrap justify-content-center gap-4">
-                    <Link to="/shop" className="summer-button w-auto px-5 py-3 h5 m-0 shadow-2xl">VÀO CỬA HÀNG NGAY 🛒</Link>
-                    <a href={siteSettings?.discord_url} target="_blank" className="summer-button-outline text-white border-3 w-auto px-5 py-3 h5 m-0" style={{ background: 'rgba(255,255,255,0.2)', borderColor: '#FFFFFF' }}>THAM GIA DISCORD 💬</a>
+                </div>
+                <div className="col-sm-4 col-6">
+                  <div className="bnc-feature-box">
+                    <p className="num"><span className="dot dot-orange" />{serverStatus?.version || siteSettings?.server_version || '1.21'}</p>
+                    <p className="lbl">Phiên bản</p>
                   </div>
-                </motion.div>
+                </div>
+                <div className="col-sm-4 col-6">
+                  <div className="bnc-feature-box">
+                    <p className="num"><span className="dot dot-yellow" />24/7</p>
+                    <p className="lbl">Giao hàng tự động</p>
+                  </div>
+                </div>
               </div>
             </motion.div>
-          </AnimatePresence>
+
+            <motion.div className="col-lg-5 d-none d-lg-block" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.15 }}>
+              <div className="bnc-hero-art">
+                <div className="glow" />
+                <div style={{ position: 'relative', aspectRatio: '16 / 10', borderRadius: '2rem', overflow: 'hidden', border: '2px solid rgba(var(--bnc-accent-rgb), .35)', boxShadow: '0 30px 60px rgba(0,0,0,.6)' }}>
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={slides[slide]}
+                      src={slides[slide]}
+                      alt={`${title} Minecraft`}
+                      initial={{ opacity: 0, scale: 1.05 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.7 }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                    />
+                  </AnimatePresence>
+                </div>
+                <img src="/img/render-enderdragon.png" alt="" aria-hidden="true" style={{ position: 'absolute', width: 150, right: -30, bottom: -60, filter: 'drop-shadow(0 15px 25px rgba(0,0,0,.6))' }} />
+                {slides.length > 1 && (
+                  <div className="d-flex justify-content-center gap-2 mt-3">
+                    {slides.map((s, i) => (
+                      <button
+                        key={s}
+                        onClick={() => setSlide(i)}
+                        aria-label={`Ảnh ${i + 1}`}
+                        style={{ width: i === slide ? 28 : 10, height: 10, border: 0, background: i === slide ? 'var(--bnc-accent)' : 'var(--bnc-surface-3)', transition: 'all .25s' }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         </div>
-
-        {/* Floating elements for Hero */}
-        <div className="summer-item dolphin" style={{ top: '20%', right: '5%', zIndex: 3 }}>🐬</div>
-        <div className="summer-item" style={{ bottom: '10%', left: '5%', fontSize: '60px', zIndex: 3 }}>⛱️</div>
-
-        <button className="carousel-btn carousel-btn-prev d-none d-md-flex" onClick={() => setCurrentSlide((prev) => (prev - 1 + carouselImages.length) % carouselImages.length)}>
-          <BiChevronLeft size={50} />
-        </button>
-        <button className="carousel-btn carousel-btn-next d-none d-md-flex" onClick={() => setCurrentSlide((prev) => (prev + 1) % carouselImages.length)}>
-          <BiChevronRight size={50} />
-        </button>
+        <Divider />
       </section>
 
-      <div className="container py-5 position-relative" style={{ zIndex: 10 }}>
-        {/* Features Section */}
-        <motion.section className="py-5" variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-          <div className="text-center mb-5">
-            <h2 className="summer-title display-4">🌊 TRẢI NGHIỆM ĐỈNH CAO 🌊</h2>
-            <p className="fw-bold text-primary">Tại sao bạn nên chọn BuildnChill trong mùa hè này?</p>
+      {/* ================= RECENT PURCHASES TICKER ================= */}
+      {recent.length > 0 && (
+        <div className="bnc-ticker" aria-label="Giao dịch gần đây">
+          <div className="bnc-ticker-track">
+            {[...recent, ...recent].map((r, i) => (
+              <span className="bnc-ticker-item" key={`${r.mc_username}-${i}`}>
+                <img src={mcHead(r.mc_username, 32)} alt="" loading="lazy" />
+                <b>{r.mc_username}</b> vừa mua <span className="text-accent fw-bold">{r.product}</span>
+              </span>
+            ))}
           </div>
+        </div>
+      )}
+
+      {/* ================= ABOUT ================= */}
+      <section className="bnc-section" id="about-us">
+        <div className="container">
+          <div className="row align-items-center g-5 flex-lg-row-reverse">
+            <div className="col-lg-4 text-center">
+              <motion.img
+                src="/img/render-villager.png"
+                alt="BuildnChill villager"
+                style={{ maxWidth: 260, width: '70%' }}
+                animate={{ y: [0, -10, 0] }}
+                transition={{ y: { repeat: Infinity, duration: 4, ease: 'easeInOut' } }}
+              />
+            </div>
+            <motion.div className="col-lg-8" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }}>
+              <span className="bnc-pill">Về chúng tôi</span>
+              <h2 className="bnc-heading">Xây dựng thế giới, <span className="highlight">tạo nên kỷ niệm</span></h2>
+              <p className="text-soft fs-6 mb-4">
+                Tại {title}, chúng tôi đam mê tạo ra những trải nghiệm gắn kết mọi người. Từ những chuyến phiêu lưu hoành tráng đến những
+                khoảnh khắc chill bên bạn bè — mỗi ngày trên máy chủ đều là một câu chuyện mới. Hãy cùng chúng tôi viết tiếp hành trình ấy!
+              </p>
+              <div className="d-flex flex-wrap gap-3">
+                <Link to="/about" className="bnc-btn bnc-btn-ghost">Tìm hiểu thêm <BiRightArrowAlt /></Link>
+                <Link to="/rules" className="bnc-btn bnc-btn-dark">Luật máy chủ</Link>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= FEATURES ================= */}
+      <section className="bnc-section bnc-section-alt">
+        <div className="container">
+          <SectionTitle pill="Vì sao chọn chúng tôi" title="Trải nghiệm" highlight="đỉnh cao" subtitle="Mọi thứ bạn cần cho một hành trình sinh tồn trọn vẹn." />
           <div className="row g-4">
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
+            {FEATURES.map((f, i) => {
+              const Icon = ICONS[f.icon] || BiRocket;
               return (
-                <motion.div key={index} className="col-md-4" variants={itemVariants} whileHover={{ y: -20 }}>
-                  <div className="summer-glass p-5 text-center h-100 border-0 shadow-xl" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <div className="d-inline-flex p-4 rounded-4 bg-info bg-opacity-10 text-info mb-4 shadow-sm">
-                      <Icon size={60} />
+                <motion.div className="col-md-6 col-lg-3" key={f.title} custom={i} variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }}>
+                  <div className="bnc-card bnc-card-hover bnc-card-pad h-100">
+                    <div className="d-inline-flex p-3 mb-3" style={{ background: 'var(--bnc-accent-soft)', color: 'var(--bnc-accent)', borderRadius: '.8rem' }}>
+                      <Icon size={30} />
                     </div>
-                    <h3 className="fw-black mb-3">{feature.title}</h3>
-                    <p className="fw-bold text-muted mb-0 leading-relaxed">{feature.description}</p>
+                    <h3 className="h5 fw-black">{f.title}</h3>
+                    <p className="text-soft mb-0 small">{f.text}</p>
                   </div>
                 </motion.div>
               );
             })}
           </div>
-        </motion.section>
+        </div>
+      </section>
 
-        {/* News Section */}
-        <motion.section className="py-5" variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-          <div className="d-flex justify-content-between align-items-end mb-5 border-bottom border-info border-opacity-20 pb-4">
-            <div>
-              <h2 className="summer-title m-0">TIN TỨC SỰ KIỆN</h2>
-              <p className="fw-bold text-primary m-0">Cập nhật những hoạt động mới nhất từ Server</p>
-            </div>
-            <Link to="/news" className="summer-button-outline w-auto px-4 py-2 small d-none d-md-block">XEM TẤT CẢ →</Link>
-          </div>
+      {/* ================= HOW TO JOIN ================= */}
+      <section className="bnc-section">
+        <div className="container">
+          <SectionTitle pill="Bắt đầu ngay" title="Vào máy chủ trong" highlight="3 bước" />
           <div className="row g-4">
-            {latestNews.map((post) => (
-              <motion.div key={post.id} className="col-md-4" variants={itemVariants} whileHover={{ y: -10 }}>
-                <div className="summer-glass h-100 shadow-2xl border-0 overflow-hidden p-0" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <div className="overflow-hidden position-relative" style={{ height: '220px' }}>
-                    <img src={post.image} className="w-100 h-100 object-fit-cover transition-all duration-500 hover-scale" alt={post.title} />
-                    <div className="position-absolute top-0 start-0 m-3 badge bg-info px-3 py-2 shadow-sm">
-                      <BiCalendar className="me-1" /> {new Date(post.date).toLocaleDateString('vi-VN')}
-                    </div>
-                  </div>
-                  <div className="p-4">
-                    <h5 className="fw-black mb-3 text-truncate-2" style={{ height: '3.2rem', lineHeight: '1.6' }}>{post.title}</h5>
-                    <p className="fw-bold text-muted mb-4 text-truncate-3 opacity-80" style={{ fontSize: '0.9rem' }}>{post.description}</p>
-                    <Link to={`/news/${post.id}`} className="summer-button w-100 py-2">XEM CHI TIẾT 📖</Link>
-                  </div>
+            {HOW_TO_JOIN.map((s, i) => (
+              <motion.div className="col-md-4" key={s.title} custom={i} variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }}>
+                <div className="bnc-card bnc-card-hover bnc-card-pad h-100">
+                  <div className="fw-black text-accent" style={{ fontSize: '2.6rem', lineHeight: 1 }}>0{i + 1}</div>
+                  <h3 className="h5 fw-black mt-3">{s.title}</h3>
+                  <p className="text-soft small mb-0">{s.text}</p>
                 </div>
               </motion.div>
             ))}
           </div>
-        </motion.section>
+          <div className="text-center mt-5">
+            <button className="bnc-btn bnc-btn-lg" onClick={() => copy(ip, `Đã sao chép IP: ${ip}`)}>
+              <BiCopy /> {ip}
+            </button>
+          </div>
+        </div>
+      </section>
 
-        {/* Server Status Section */}
-        <motion.section initial={{ opacity: 0, y: 50 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="py-5">
-          <div className="server-status-card summer-glass p-5 overflow-hidden shadow-2xl border-0">
-            <div className="mb-4 text-center">
-              <h2 className="summer-title mb-2">TRẠNG THÁI MÁY CHỦ</h2>
-              <p className="text-muted mb-0">Cập nhật nhanh tình trạng server, số người chơi và IP kết nối.</p>
-            </div>
-            <div className="server-status-grid">
-              <div className="server-status-item p-4 rounded-4 shadow-sm">
-                <div className="server-status-label">TRẠNG THÁI</div>
-                <div className={`server-status-value ${serverStatus?.status === 'Online' ? 'text-success' : 'text-danger'}`}>
-                  {serverStatus?.status === 'Online' ? 'Online' : 'Offline'}
-                </div>
-              </div>
-              <div className="server-status-item p-4 rounded-4 shadow-sm">
-                <div className="server-status-label">NGƯỜI CHƠI</div>
-                <div className="d-flex align-items-baseline gap-2 flex-nowrap">
-                  <div className="server-status-value text-info">{serverStatus?.players || 0}</div>
-                  <div className="server-status-meta">/ {serverStatus?.maxPlayers || 0} chỗ</div>
-                </div>
-              </div>
-              <div className="server-status-item p-4 rounded-4 shadow-sm">
-                <div className="server-status-label">PHIÊN BẢN</div>
-                <div className="server-status-value text-primary">{serverStatus?.version || siteSettings?.server_version || '1.20.4'}</div>
-              </div>
-            </div>
-            <div className="server-status-ip mt-5 mx-auto d-flex align-items-center justify-content-between gap-3 rounded-pill p-3 shadow-sm">
+      {/* ================= SHOP HIGHLIGHT ================= */}
+      {products.length > 0 && (
+        <section className="bnc-section bnc-section-alt">
+          <div className="container">
+            <div className="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-5">
               <div>
-                <div className="small text-muted mb-1">Kết nối</div>
-                <strong className="h5 text-info user-select-all m-0">{serverIp}</strong>
+                <span className="bnc-pill">Cửa hàng</span>
+                <h2 className="bnc-heading mb-0">Vật phẩm <span className="highlight">nổi bật</span></h2>
               </div>
-              <button className="btn btn-sm btn-info text-white rounded-pill px-4 fw-bold" onClick={() => { navigator.clipboard.writeText(serverIp); alert('Đã copy IP!'); }}>COPY IP</button>
+              <Link to="/shop" className="bnc-btn bnc-btn-ghost"><BiStore /> Xem tất cả</Link>
+            </div>
+            <div className="row g-4">
+              {products.map((p, i) => (
+                <motion.div className="col-6 col-lg-3" key={p.id} custom={i} variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }}>
+                  <Link to={`/shop?product=${p.id}`} className="bnc-card bnc-card-hover bnc-product text-white">
+                    <div className="bnc-product-media">
+                      <img src={p.image_url || '/img/logo.png'} alt={p.name} loading="lazy" />
+                    </div>
+                    <h3 className="text-truncate">{p.name}</h3>
+                    <div className="bnc-price mt-auto">{formatVnd(p.price)}</div>
+                  </Link>
+                </motion.div>
+              ))}
             </div>
           </div>
-        </motion.section>
-      </div>
+        </section>
+      )}
 
-      {/* Decorative footer elements */}
-      <div className="text-center py-5 opacity-50 overflow-hidden w-100">
-        <div className="d-flex justify-content-center gap-5">
-          <span className="summer-item-static" style={{ fontSize: '40px' }}>🐬</span>
-          <span className="summer-item-static" style={{ fontSize: '40px' }}>🐚</span>
-          <span className="summer-item-static" style={{ fontSize: '40px' }}>🏖️</span>
-          <span className="summer-item-static" style={{ fontSize: '40px' }}>🦀</span>
-          <span className="summer-item-static" style={{ fontSize: '40px' }}>🐳</span>
+      {/* ================= NEWS ================= */}
+      <section className="bnc-section">
+        <div className="container">
+          <div className="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-5">
+            <div>
+              <span className="bnc-pill">Tin tức</span>
+              <h2 className="bnc-heading mb-0">Cập nhật & <span className="highlight">sự kiện</span></h2>
+            </div>
+            <Link to="/news" className="bnc-btn bnc-btn-ghost">Tất cả tin tức <BiRightArrowAlt /></Link>
+          </div>
+          {latestNews.length === 0 ? (
+            <div className="bnc-card bnc-empty">Chưa có bài viết nào.</div>
+          ) : (
+            <div className="row g-4">
+              {latestNews.map((post, i) => (
+                <motion.div className="col-md-6 col-lg-4" key={post.id} custom={i} variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }}>
+                  <Link to={`/news/${post.slug || post.id}`} className="bnc-card bnc-card-hover bnc-post text-white">
+                    <div className="bnc-post-img">
+                      <img src={post.image || '/img/blog-cover.jpg'} alt={post.title} loading="lazy" />
+                      <span className="bnc-post-date"><BiCalendar className="me-1" />{new Date(post.date || post.created_at).toLocaleDateString('vi-VN')}</span>
+                    </div>
+                    <div className="bnc-post-body">
+                      <h3>{post.title}</h3>
+                      <p>{post.description}</p>
+                      <span className="bnc-post-link text-accent">Đọc tiếp →</span>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
-    </div>
+      </section>
+
+      {/* ================= CTA ================= */}
+      <section className="bnc-section pt-0">
+        <div className="container">
+          <div className="bnc-cta">
+            <div className="row align-items-center g-4">
+              <div className="col-lg-8">
+                <span className="bnc-pill">Cộng đồng</span>
+                <h2 className="bnc-heading">Tham gia Discord <span className="highlight">{title}</span></h2>
+                <p className="text-soft mb-0">Nhận thông báo sự kiện, giao lưu cùng hàng trăm người chơi và được hỗ trợ nhanh nhất từ đội ngũ quản trị.</p>
+              </div>
+              <div className="col-lg-4 text-lg-end">
+                <a href={siteSettings?.discord_url || 'https://discord.gg/buildnchill'} target="_blank" rel="noopener noreferrer" className="bnc-btn bnc-btn-lg bnc-btn-discord">
+                  <FaDiscord size={20} /> Tham gia ngay
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 };
 

@@ -1,10 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BiWallet, BiPlus, BiMinus, BiSearch, BiHistory, BiRefresh, BiUser } from 'react-icons/bi';
-import '../styles/summer-theme.css';
+import { useToast } from './ui';
+import { formatVnd, mcHead } from '../lib/api';
+
+const TX_TYPE = {
+  recharge: 'Nạp tiền',
+  purchase: 'Mua hàng',
+  admin_adjustment: 'Admin điều chỉnh',
+  refund: 'Hoàn tiền',
+};
 
 const WalletManagement = () => {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,279 +21,207 @@ const WalletManagement = () => {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
   const [transactions, setTransactions] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const selectedRef = useRef(null);
+  selectedRef.current = selectedUser;
 
-  useEffect(() => {
-    fetchUsers(true);
+  const fetchTransactions = useCallback(async (walletId) => {
+    const { data, error } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('wallet_id', walletId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (!error) setTransactions(data || []);
+  }, []);
 
-    const profileChannel = supabase.channel('admin_profile_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchUsers(false);
-      })
-      .subscribe();
-
-    const walletChannel = supabase.channel('admin_wallet_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => {
-        fetchUsers(false);
-      })
-      .subscribe();
-
-    const handleUpdate = () => {
-      fetchUsers(false);
-    };
-
-    window.addEventListener('wallet_updated', handleUpdate);
-    return () => {
-      window.removeEventListener('wallet_updated', handleUpdate);
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(walletChannel);
-    };
-  }, [selectedUser?.id]);
-
-  const fetchUsers = async (showLoading = true) => {
+  const fetchUsers = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          username,
-          role,
-          wallets (
-            id,
-            balance,
-            user_id
-          )
-        `)
+        .select('id, username, role, wallets ( id, balance, user_id )')
         .order('username');
-
       if (error) throw error;
 
-      const processedData = data?.map(user => {
-        let balance = 0;
-        let walletId = null;
-
-        if (Array.isArray(user.wallets)) {
-          balance = user.wallets[0]?.balance || 0;
-          walletId = user.wallets[0]?.id;
-        } else if (user.wallets) {
-          balance = user.wallets.balance || 0;
-          walletId = user.wallets.id;
-        }
-
-        return {
-          ...user,
-          display_balance: balance,
-          wallet_id: walletId
-        };
+      const processed = (data || []).map((u) => {
+        const w = Array.isArray(u.wallets) ? u.wallets[0] : u.wallets;
+        return { ...u, display_balance: w?.balance || 0, wallet_id: w?.id || null };
       });
+      setUsers(processed);
 
-      setUsers(processedData || []);
-
-      if (selectedUser) {
-        const updatedUser = (processedData || []).find(u => u.id === selectedUser.id);
-        if (updatedUser && JSON.stringify(updatedUser) !== JSON.stringify(selectedUser)) {
-          setSelectedUser(updatedUser);
-          if (updatedUser.wallet_id) {
-            fetchTransactions(updatedUser.wallet_id);
-          }
+      const current = selectedRef.current;
+      if (current) {
+        const updated = processed.find((u) => u.id === current.id);
+        if (updated && updated.display_balance !== current.display_balance) {
+          setSelectedUser(updated);
+          if (updated.wallet_id) fetchTransactions(updated.wallet_id);
         }
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+      toast('Không tải được danh sách ví', 'error');
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [fetchTransactions, toast]);
 
-  const fetchTransactions = async (walletId) => {
-    try {
-      const { data, error } = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .eq('wallet_id', walletId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      setTransactions(data || []);
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-    }
+  useEffect(() => {
+    fetchUsers(true);
+    const walletChannel = supabase.channel('admin_wallet_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => fetchUsers(false))
+      .subscribe();
+    const handleUpdate = () => fetchUsers(false);
+    window.addEventListener('wallet_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('wallet_updated', handleUpdate);
+      supabase.removeChannel(walletChannel);
+    };
+  }, [fetchUsers]);
+
+  const selectUser = (user) => {
+    setSelectedUser(user);
+    setTransactions([]);
+    if (user.wallet_id) fetchTransactions(user.wallet_id);
   };
 
   const handleAdjustBalance = async (type) => {
-    if (!selectedUser || !adjustAmount || !adjustReason) {
-      alert('Vui lòng nhập đầy đủ thông tin!');
+    const amount = parseInt(adjustAmount, 10);
+    if (!selectedUser || !amount || amount <= 0 || !adjustReason.trim()) {
+      toast('Nhập số tiền hợp lệ và lý do điều chỉnh', 'error');
       return;
     }
-
-    const amount = parseInt(adjustAmount);
     const finalAmount = type === 'plus' ? amount : -amount;
+    if (!window.confirm(`${type === 'plus' ? 'Cộng' : 'Trừ'} ${formatVnd(amount)} ${type === 'plus' ? 'vào' : 'khỏi'} ví của ${selectedUser.username}?`)) return;
 
+    setSaving(true);
     try {
       const { error } = await supabase.rpc('admin_adjust_balance', {
         p_user_id: selectedUser.id,
         p_amount: finalAmount,
         p_type: 'admin_adjustment',
-        p_note: adjustReason
+        p_note: adjustReason.trim(),
       });
-
       if (error) throw error;
-
+      toast(`Đã ${type === 'plus' ? 'cộng' : 'trừ'} ${formatVnd(amount)}`, 'success');
       setAdjustAmount('');
       setAdjustReason('');
-      fetchUsers();
+      fetchUsers(false);
+      if (selectedUser.wallet_id) fetchTransactions(selectedUser.wallet_id);
     } catch (error) {
-      alert('Lỗi: ' + error.message);
+      toast('Lỗi: ' + (error.message === 'Insufficient balance' ? 'Số dư không đủ để trừ' : error.message), 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const filteredUsers = users.filter(u =>
-    u.username?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter((u) => (u.username || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const totalBalance = users.reduce((s, u) => s + Number(u.display_balance || 0), 0);
 
   return (
-    <div className="wallet-management">
-      <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-info border-opacity-10">
-        <h3 className="fw-black text-primary m-0">QUẢN LÝ VÍ TIỀN</h3>
-        <button className="btn btn-light border text-primary rounded-3 shadow-sm" onClick={() => fetchUsers(true)}>
-          <BiRefresh size={22} />
-        </button>
+    <div>
+      <div className="bnc-admin-title">
+        <div>
+          <h2>Ví người dùng</h2>
+          <p>Tổng số dư toàn hệ thống: <b className="text-accent">{formatVnd(totalBalance)}</b></p>
+        </div>
+        <button className="bnc-icon-btn" onClick={() => fetchUsers(true)} aria-label="Làm mới"><BiRefresh size={18} /></button>
       </div>
 
-      <div className="row g-4">
-        <div className="col-md-5">
-          <div className="summer-glass p-4 h-100 border-0 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <h5 className="mb-4 fw-black text-dark d-flex align-items-center gap-2">
-              <BiSearch size={22} className="text-primary" /> TÌM NGƯỜI CHƠI
-            </h5>
-            <div className="position-relative mb-4">
-              <input
-                type="text"
-                className="summer-input w-100 py-2"
-                placeholder="Nhập tên nhân vật..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+      <div className="row g-3">
+        <div className="col-lg-5">
+          <div className="bnc-card bnc-card-pad h-100">
+            <div className="position-relative mb-3">
+              <BiSearch className="position-absolute text-dim" style={{ left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+              <input type="text" className="bnc-input" style={{ paddingLeft: 34 }} placeholder="Tìm tài khoản..."
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-
-            <div className="user-list overflow-auto pe-2" style={{ maxHeight: '450px' }}>
+            <div className="overflow-auto pe-1 d-flex flex-column gap-2" style={{ maxHeight: 480 }}>
               {loading ? (
-                <div className="text-center py-4"><div className="spinner-border text-primary border-3"></div></div>
-              ) : filteredUsers.length > 0 ? (
-                filteredUsers.map(user => (
-                  <motion.div
-                    key={user.id}
-                    whileHover={{ x: 5 }}
-                    className={`p-3 rounded-4 mb-2 cursor-pointer transition-all border-2 d-flex align-items-center justify-content-between ${selectedUser?.id === user.id ? 'bg-primary text-white border-primary shadow-md' : 'border-transparent'
-                      }`}
-                    onClick={() => {
-                      setSelectedUser(user);
-                      if (user.wallet_id) fetchTransactions(user.wallet_id);
-                    }}
-                    style={{ cursor: 'pointer', backgroundColor: selectedUser?.id === user.id ? undefined : 'var(--bg-sand-light)' }}
-                  >
-                    <div className="d-flex align-items-center gap-3">
-                      <img src={`https://vzge.me/bust/${user.username}.png`} alt="Skin" style={{ width: '32px' }} />
-                      <span className="fw-bold">{user.username}</span>
-                    </div>
-                    <span className={`fw-black ${selectedUser?.id === user.id ? 'text-white' : 'text-primary'}`}>
-                      {(user.display_balance || 0).toLocaleString()}đ
-                    </span>
-                  </motion.div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-muted small">Không tìm thấy người chơi.</div>
+                <div className="text-center py-4"><div className="spinner-border text-primary" /></div>
+              ) : filteredUsers.length > 0 ? filteredUsers.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  className={`bnc-pay-option py-2 ${selectedUser?.id === u.id ? 'active' : ''}`}
+                  onClick={() => selectUser(u)}
+                >
+                  <img src={mcHead(u.username, 32)} alt="" width="32" height="32" className="rounded-2" />
+                  <span className="fw-bold flex-grow-1 text-truncate">
+                    {u.username}
+                    {u.role === 'admin' && <span className="ms-2 small text-accent">ADMIN</span>}
+                  </span>
+                  <span className="fw-black text-accent">{formatVnd(u.display_balance)}</span>
+                </button>
+              )) : (
+                <div className="bnc-empty py-4">Không tìm thấy tài khoản</div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="col-md-7">
+        <div className="col-lg-7">
           <AnimatePresence mode="wait">
             {selectedUser ? (
               <motion.div
                 key={selectedUser.id}
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="d-flex flex-column gap-4"
+                exit={{ opacity: 0, x: -12 }}
+                className="d-flex flex-column gap-3"
               >
-                <div className="summer-glass p-4 border-0 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <h5 className="mb-4 fw-black text-dark d-flex align-items-center gap-2">
-                    <BiWallet size={22} className="text-primary" /> ĐIỀU CHỈNH: {selectedUser.username}
-                  </h5>
-
-                  <div className="row g-4 mb-4">
-                    <div className="col-md-6">
-                      <label className="summer-label">SỐ TIỀN (VNĐ)</label>
-                      <input
-                        type="number"
-                        className="summer-input w-100"
-                        value={adjustAmount}
-                        onChange={(e) => setAdjustAmount(e.target.value)}
-                        placeholder="VD: 50000"
-                      />
+                <div className="bnc-card bnc-card-pad">
+                  <div className="d-flex align-items-center gap-3 mb-4">
+                    <img src={mcHead(selectedUser.username, 64)} alt="" width="52" height="52" className="rounded-3" />
+                    <div className="flex-grow-1 min-w-0">
+                      <div className="fw-black fs-5 text-truncate">{selectedUser.username}</div>
+                      <div className="small text-soft"><BiWallet className="me-1" />Số dư hiện tại</div>
                     </div>
-                    <div className="col-md-6">
-                      <label className="summer-label">LÝ DO ĐIỀU CHỈNH</label>
-                      <input
-                        className="summer-input w-100"
-                        value={adjustReason}
-                        onChange={(e) => setAdjustReason(e.target.value)}
-                        placeholder="VD: Hoàn tiền, Thưởng sự kiện..."
-                      />
-                    </div>
+                    <div className="fw-black fs-3 text-accent">{formatVnd(selectedUser.display_balance)}</div>
                   </div>
 
-                  <div className="row g-3">
-                    <div className="col-6">
-                      <button
-                        onClick={() => handleAdjustBalance('plus')}
-                        className="summer-button w-100 py-3 d-flex align-items-center justify-content-center gap-2 shadow-sm"
-                      >
-                        <BiPlus size={20} /> CỘNG TIỀN
-                      </button>
+                  <div className="row g-3 mb-3">
+                    <div className="col-md-5">
+                      <label className="bnc-label">Số tiền (VNĐ)</label>
+                      <input type="number" min="1" className="bnc-input" value={adjustAmount}
+                        onChange={(e) => setAdjustAmount(e.target.value)} placeholder="VD: 50000" />
                     </div>
-                    <div className="col-6">
-                      <button
-                        onClick={() => handleAdjustBalance('minus')}
-                        className="summer-button-outline w-100 py-3 d-flex align-items-center justify-content-center gap-2 border-danger text-danger shadow-sm"
-                        style={{ backgroundColor: 'transparent' }}
-                      >
-                        <BiMinus size={20} /> TRỪ TIỀN
-                      </button>
+                    <div className="col-md-7">
+                      <label className="bnc-label">Lý do</label>
+                      <input className="bnc-input" value={adjustReason}
+                        onChange={(e) => setAdjustReason(e.target.value)} placeholder="VD: Hoàn tiền, thưởng sự kiện..." />
                     </div>
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button className="bnc-btn bnc-btn-green flex-grow-1" disabled={saving} onClick={() => handleAdjustBalance('plus')}>
+                      <BiPlus /> Cộng tiền
+                    </button>
+                    <button className="bnc-btn bnc-btn-red bnc-btn-ghost flex-grow-1" disabled={saving} onClick={() => handleAdjustBalance('minus')}>
+                      <BiMinus /> Trừ tiền
+                    </button>
                   </div>
                 </div>
 
-                <div className="summer-glass p-4 border-0 shadow-lg" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <h5 className="mb-4 fw-black text-dark d-flex align-items-center gap-2">
-                    <BiHistory size={22} className="text-primary" /> GIAO DỊCH GẦN ĐÂY
-                  </h5>
+                <div className="bnc-card">
+                  <h6 className="fw-black p-3 pb-0 m-0 d-flex align-items-center gap-2"><BiHistory className="text-accent" /> Giao dịch gần đây</h6>
                   <div className="table-responsive">
-                    <table className="table summer-table mb-0">
+                    <table className="bnc-admin-table">
                       <thead>
-                        <tr>
-                          <th>THỜI GIAN</th>
-                          <th className="text-center">BIẾN ĐỘNG</th>
-                          <th className="text-end">LÝ DO</th>
-                        </tr>
+                        <tr><th>Thời gian</th><th>Loại</th><th className="text-end">Biến động</th><th className="text-end">Số dư sau</th><th>Ghi chú</th></tr>
                       </thead>
                       <tbody>
-                        {transactions.length > 0 ? (
-                          transactions.map(t => (
-                            <tr key={t.id}>
-                              <td className="small text-muted align-middle">{new Date(t.created_at).toLocaleString('vi-VN')}</td>
-                              <td className={`align-middle text-center fw-black fs-6 ${t.amount > 0 ? 'text-success' : 'text-danger'}`}>
-                                {t.amount > 0 ? '+' : ''}{t.amount.toLocaleString()}đ
-                              </td>
-                              <td className="align-middle text-end text-truncate fw-medium" style={{ maxWidth: '200px' }} title={t.note}>{t.note}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="3" className="text-center py-4 text-muted small fw-bold">Chưa có lịch sử giao dịch. 🌴</td>
+                        {transactions.length > 0 ? transactions.map((t) => (
+                          <tr key={t.id}>
+                            <td className="small text-soft text-nowrap">{new Date(t.created_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                            <td className="small">{TX_TYPE[t.type] || t.type}</td>
+                            <td className={`text-end fw-black ${t.amount > 0 ? 'text-success' : 'text-danger'}`}>
+                              {t.amount > 0 ? '+' : ''}{formatVnd(t.amount)}
+                            </td>
+                            <td className="text-end small">{formatVnd(t.balance_after)}</td>
+                            <td className="small text-soft text-truncate" style={{ maxWidth: 200 }} title={t.note}>{t.note}</td>
                           </tr>
+                        )) : (
+                          <tr><td colSpan="5" className="bnc-empty">Chưa có giao dịch</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -292,9 +229,9 @@ const WalletManagement = () => {
                 </div>
               </motion.div>
             ) : (
-              <div className="summer-glass p-5 text-center text-muted h-100 d-flex flex-column align-items-center justify-content-center shadow-lg border-0 border-dashed border-2" style={{ backgroundColor: 'var(--bg-card)' }}>
-                <BiUser size={60} className="mb-3 opacity-20" />
-                <p className="fw-bold m-0">Vui lòng chọn một người chơi để xem chi tiết và điều chỉnh số dư ví.</p>
+              <div className="bnc-card bnc-card-pad h-100 d-flex flex-column align-items-center justify-content-center text-center text-dim" style={{ minHeight: 260 }}>
+                <BiUser size={54} className="mb-3" />
+                <p className="fw-bold m-0">Chọn một tài khoản để xem lịch sử và điều chỉnh số dư.</p>
               </div>
             )}
           </AnimatePresence>

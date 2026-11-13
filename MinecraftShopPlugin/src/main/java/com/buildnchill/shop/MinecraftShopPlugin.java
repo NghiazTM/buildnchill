@@ -1,305 +1,400 @@
 package com.buildnchill.shop;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Sound;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Minecraft Shop Plugin
- * Poll Supabase REST API để lấy orders và thực thi commands
- * 
- * @author BuildnChill
- * @version 1.0.0
+ * BuildnChill Shop v2 — nhận đơn hàng từ website qua Netlify plugin bridge
+ * và giao vật phẩm trong game khi người chơi online.
  */
-public class MinecraftShopPlugin extends JavaPlugin {
-    
-    private static final Logger logger = Logger.getLogger("MinecraftShopPlugin");
-    
-    // Cấu hình - THAY ĐỔI CÁC GIÁ TRỊ NÀY
-    private String supabaseUrl = "https://byaxtcrajucaifflanmd.supabase.co";
-    private String supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5YXh0Y3JhanVjYWlmZmxhbm1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxNjAwNDQsImV4cCI6MjA4MjczNjA0NH0.H7Q33o_KJMH3ZqoAZWyz5Mh67rBZjLLz74iQGrIsh9g";
-    private String discordWebhookUrl = "https://discord.com/api/webhooks/1458351729023254529/TldcZM4HKMyELK9ZICAO8WXQDcG6vqCtYeSXJZ7NqXRWf1fZP_MRAjfjfkx-qgOrLJgS";
-    private int pollInterval = 15; // Giây (10-20 giây)
-    
+public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabCompleter {
+
+    private static final String DEFAULT_URL = "https://buildnchill.id.vn/api/plugin-bridge";
+    private static final int EXECUTED_CACHE_SIZE = 2000;
+
+    private BridgeClient client;
     private BukkitTask pollTask;
-    private final java.util.Set<String> processedIds = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
-    
+    private final AtomicBoolean polling = new AtomicBoolean(false);
+
+    /** Kết quả chưa gửi được cho bridge — gửi lại ở chu kỳ sau. */
+    private final Map<String, BridgeClient.Result> pendingResults = Collections.synchronizedMap(new LinkedHashMap<>());
+
+    /** Các đơn đã thực thi (LRU) — nếu bridge gửi lại thì chỉ ack, không chạy lệnh lần 2. */
+    private final Map<String, BridgeClient.Result> executed = Collections.synchronizedMap(
+            new LinkedHashMap<String, BridgeClient.Result>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, BridgeClient.Result> eldest) {
+                    return size() > EXECUTED_CACHE_SIZE;
+                }
+            });
+
+    // Thống kê
+    private final AtomicLong deliveredCount = new AtomicLong();
+    private final AtomicLong failedCount = new AtomicLong();
+    private volatile long lastPollAt = 0L;
+    private volatile long lastSuccessAt = 0L;
+    private volatile String lastError = null;
+    private volatile String lastLoggedError = null;
+
+    // ==================== Lifecycle ====================
+
     @Override
     public void onEnable() {
-        // Load config từ config.yml
         saveDefaultConfig();
-        reloadConfig();
-        supabaseUrl = getConfig().getString("supabase.url", supabaseUrl);
-        supabaseAnonKey = getConfig().getString("supabase.anon_key", supabaseAnonKey);
-        discordWebhookUrl = getConfig().getString("discord.webhook_url", discordWebhookUrl);
-        pollInterval = getConfig().getInt("poll.interval_seconds", pollInterval);
-        
-        // Bắt đầu polling task
-        startPolling();
-        
-        logger.info("Minecraft Shop Plugin (Silent Mode) đã sẵn sàng!");
+        Bukkit.getPluginManager().registerEvents(this, this);
+        if (getCommand("bncshop") != null) {
+            getCommand("bncshop").setTabCompleter(this);
+        }
+        loadAndStart();
+        getLogger().info("BuildnChill Shop v" + getDescription().getVersion() + " đã sẵn sàng!");
     }
-    
+
     @Override
     public void onDisable() {
-        if (pollTask != null && !pollTask.isCancelled()) {
+        stopTask();
+        if (!pendingResults.isEmpty()) {
+            getLogger().warning("Còn " + pendingResults.size() + " kết quả giao hàng chưa gửi được lên website.");
+        }
+        getLogger().info("BuildnChill Shop đã tắt.");
+    }
+
+    private void loadAndStart() {
+        stopTask();
+        reloadConfig();
+        FileConfiguration cfg = getConfig();
+
+        String url = cfg.getString("bridge.url", DEFAULT_URL);
+        String secret = cfg.getString("bridge.secret", "");
+        client = new BridgeClient(url, secret);
+        lastLoggedError = null;
+
+        if (secret == null || secret.isBlank() || secret.startsWith("DOI_")) {
+            client = null;
+            lastError = "Chưa cấu hình bridge.secret";
+            getLogger().warning("Chưa cấu hình bridge.secret trong config.yml — plugin sẽ KHÔNG giao hàng.");
+            getLogger().warning("Đặt bridge.secret trùng với biến PLUGIN_SECRET trên Netlify rồi dùng /bncshop reload.");
+            return;
+        }
+
+        int interval = Math.max(3, cfg.getInt("poll.interval_seconds", 10));
+        pollTask = Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollCycle, 40L, interval * 20L);
+        getLogger().info("Đang kết nối bridge: " + url + " (mỗi " + interval + " giây)");
+    }
+
+    private void stopTask() {
+        if (pollTask != null) {
             pollTask.cancel();
-        }
-        logger.info("Minecraft Shop Plugin đã tắt.");
-    }
-    
-    /**
-     * Bắt đầu polling Supabase mỗi N giây
-     */
-    private void startPolling() {
-        pollTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-            this,
-            this::pollSupabase,
-            0L, // Delay ban đầu (0 = chạy ngay)
-            pollInterval * 20L // Convert giây sang ticks (1 giây = 20 ticks)
-        );
-    }
-    
-    /**
-     * Poll Supabase để lấy pending_commands
-     */
-    private void pollSupabase() {
-        try {
-            List<Order> commands = fetchPendingCommands();
-            if (commands.isEmpty()) return;
-            
-            for (Order cmd : commands) {
-                if (processedIds.contains(cmd.getId())) continue;
-                executeCommand(cmd);
-            }
-        } catch (Exception e) {
-            // Im lặng
+            pollTask = null;
         }
     }
-    
-    /**
-     * Fetch pending_commands từ Supabase REST API
-     */
-    private List<Order> fetchPendingCommands() throws Exception {
-        String apiUrl = supabaseUrl + "/rest/v1/pending_commands?status=eq.pending&order=created_at.asc";
-        
-        URL url = new URL(apiUrl);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        conn.setRequestProperty("apikey", supabaseAnonKey);
-        conn.setRequestProperty("Authorization", "Bearer " + supabaseAnonKey);
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("Prefer", "return=representation");
-        
-        int responseCode = conn.getResponseCode();
-        
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw new Exception("HTTP Error: " + responseCode + " - " + conn.getResponseMessage());
-        }
-        
-        // Đọc response
-        StringBuilder response = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-            }
-        }
-        
-        // Parse JSON
-        return parseCommandsJson(response.toString());
-    }
-    
-    /**
-     * Parse JSON response từ pending_commands
-     * Sử dụng regex để tách các object JSON một cách an toàn hơn
-     */
-    private List<Order> parseCommandsJson(String json) {
-        List<Order> commands = new ArrayList<>();
-        
-        try {
-            json = json.trim();
-            if (!json.startsWith("[") || !json.endsWith("]")) {
-                return commands;
-            }
-            
-            // Xóa dấu [ ] ở hai đầu
-            String content = json.substring(1, json.length() - 1).trim();
-            if (content.isEmpty()) return commands;
 
-            // Tách các object bằng regex: tìm các cụm { ... } 
-            // Lưu ý: Đây là giải pháp tạm thời nếu không muốn dùng thư viện GSON
-            // Ở đây tôi sẽ dùng cách an toàn hơn để trích xuất dữ liệu
-            List<String> objects = new ArrayList<>();
-            int braceCount = 0;
-            StringBuilder currentObj = new StringBuilder();
-            boolean inQuotes = false;
+    // ==================== Poll cycle (async) ====================
 
-            for (int i = 0; i < content.length(); i++) {
-                char c = content.charAt(i);
-                if (c == '\"' && (i == 0 || content.charAt(i-1) != '\\')) {
-                    inQuotes = !inQuotes;
-                }
-                
-                if (!inQuotes) {
-                    if (c == '{') braceCount++;
-                    if (c == '}') braceCount--;
-                }
-                
-                currentObj.append(c);
-                
-                if (braceCount == 0 && c == '}' && currentObj.length() > 0) {
-                    objects.add(currentObj.toString());
-                    currentObj = new StringBuilder();
-                    // Bỏ qua dấu phẩy giữa các object
-                    while (i + 1 < content.length() && (content.charAt(i+1) == ',' || Character.isWhitespace(content.charAt(i+1)))) {
-                        i++;
+    private void requestPoll(long delayTicks) {
+        if (client == null || !isEnabled()) return;
+        Bukkit.getScheduler().runTaskLaterAsynchronously(this, this::pollCycle, Math.max(1L, delayTicks));
+    }
+
+    private void pollCycle() {
+        if (client == null || !polling.compareAndSet(false, true)) return;
+        BridgeClient bridge = client;
+        try {
+            lastPollAt = System.currentTimeMillis();
+
+            // 1. Snapshot người chơi online trên main thread
+            List<String> online = Bukkit.getScheduler().callSyncMethod(this, () -> {
+                List<String> names = new ArrayList<>();
+                for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+                return names;
+            }).get(10, TimeUnit.SECONDS);
+
+            List<BridgeClient.Result> results = new ArrayList<>();
+
+            // 2. Lấy đơn cần giao
+            if (!online.isEmpty()) {
+                List<BridgeClient.Delivery> deliveries = bridge.fetch(online);
+                List<BridgeClient.Delivery> toRun = new ArrayList<>();
+
+                for (BridgeClient.Delivery d : deliveries) {
+                    BridgeClient.Result prev = executed.get(d.id);
+                    if (prev != null) {
+                        results.add(prev); // Đã chạy trước đó — chỉ ack lại
+                    } else if (!pendingResults.containsKey(d.id)) {
+                        toRun.add(d);
                     }
                 }
-            }
 
-            for (String objStr : objects) {
-                Order cmd = new Order();
-                // Trích xuất các field bằng regex để tránh bị lỗi bởi dấu phẩy bên trong giá trị
-                cmd.setId(extractJsonValue(objStr, "id"));
-                cmd.setCommand(extractJsonValue(objStr, "command"));
-                cmd.setMcUsername(extractJsonValue(objStr, "mc_username"));
-                cmd.setStatus(extractJsonValue(objStr, "status"));
-                cmd.setDiscordMessageId(extractJsonValue(objStr, "discord_message_id"));
-                
-                if (cmd.getId() != null && cmd.getCommand() != null) {
-                    commands.add(cmd);
+                // 3. Chạy lệnh trên main thread
+                if (!toRun.isEmpty()) {
+                    List<BridgeClient.Result> ran = Bukkit.getScheduler()
+                            .callSyncMethod(this, () -> executeDeliveries(toRun))
+                            .get(30, TimeUnit.SECONDS);
+                    results.addAll(ran);
                 }
             }
-            
+
+            // 4. Gộp với kết quả tồn đọng và gửi lên bridge
+            for (BridgeClient.Result r : results) pendingResults.put(r.id, r);
+            if (!pendingResults.isEmpty()) {
+                List<BridgeClient.Result> batch;
+                synchronized (pendingResults) {
+                    batch = new ArrayList<>(pendingResults.values());
+                }
+                bridge.report(batch);
+                synchronized (pendingResults) {
+                    for (BridgeClient.Result r : batch) pendingResults.remove(r.id);
+                }
+            }
+
+            onBridgeOk();
+        } catch (BridgeClient.BridgeException e) {
+            onBridgeError(e.getMessage());
         } catch (Exception e) {
-            logger.log(Level.WARNING, "Lỗi parse JSON: " + e.getMessage(), e);
+            onBridgeError("Lỗi xử lý: " + e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? " - " + e.getMessage() : ""));
+        } finally {
+            polling.set(false);
         }
-        
-        return commands;
     }
 
-    /**
-     * Helper để trích xuất giá trị từ chuỗi JSON đơn giản
-     */
-    private String extractJsonValue(String json, String key) {
-        // Regex xử lý chuỗi có chứa escaped quotes: "key": "value\"with\"quotes"
-        String pattern = "\"" + key + "\":\\s*\"((?:\\\\.|[^\\\\\"])*)\"";
-        java.util.regex.Pattern r = java.util.regex.Pattern.compile(pattern);
-        java.util.regex.Matcher m = r.matcher(json);
-        if (m.find()) {
-            String value = m.group(1);
-            // Unescape các ký tự: \" -> ", \\ -> \
-            return value.replace("\\\"", "\"").replace("\\\\", "\\");
+    private void onBridgeOk() {
+        lastSuccessAt = System.currentTimeMillis();
+        if (lastError != null && lastLoggedError != null) {
+            getLogger().info("Đã kết nối lại bridge thành công.");
         }
-        // Thử trường hợp không có dấu ngoặc kép (cho số hoặc null)
-        pattern = "\"" + key + "\":\\s*([^,}\\]\\s]*)";
-        r = java.util.regex.Pattern.compile(pattern);
-        m = r.matcher(json);
-        if (m.find()) {
-            String val = m.group(1).replace("\"", "");
-            return val.equals("null") ? null : val;
-        }
-        return null;
+        lastError = null;
+        lastLoggedError = null;
     }
-    
-    /**
-     * Xử lý một command: thực thi và update Supabase
-     */
-    private void executeCommand(Order cmd) {
-        Bukkit.getScheduler().runTask(this, () -> {
+
+    private void onBridgeError(String msg) {
+        lastError = msg;
+        if (!msg.equals(lastLoggedError)) {
+            getLogger().warning("[Bridge] " + msg);
+            lastLoggedError = msg;
+        }
+    }
+
+    // ==================== Thực thi giao hàng (main thread) ====================
+
+    private List<BridgeClient.Result> executeDeliveries(List<BridgeClient.Delivery> deliveries) {
+        Map<String, Player> onlineByLower = new HashMap<>();
+        for (Player p : Bukkit.getOnlinePlayers()) onlineByLower.put(p.getName().toLowerCase(Locale.ROOT), p);
+
+        List<BridgeClient.Result> results = new ArrayList<>();
+        for (BridgeClient.Delivery d : deliveries) {
+            Player player = onlineByLower.get(d.mcUsername.toLowerCase(Locale.ROOT));
+            if (player == null) continue; // Không online — để server xếp hàng lại
+
+            BridgeClient.Result r = runDelivery(d, player);
+            executed.put(d.id, r);
+            results.add(r);
+        }
+        return results;
+    }
+
+    private BridgeClient.Result runDelivery(BridgeClient.Delivery d, Player player) {
+        String product = d.productName != null ? d.productName : "vật phẩm";
+        if (d.commands.isEmpty()) {
+            failedCount.incrementAndGet();
+            getLogger().warning("❌ Đơn " + d.id + " (" + product + ") không có lệnh nào để chạy.");
+            return new BridgeClient.Result(d.id, false, "Đơn không có lệnh nào");
+        }
+
+        ConsoleCommandSender console = Bukkit.getConsoleSender();
+        String error = null;
+        int ran = 0;
+
+        for (String raw : d.commands) {
+            String cmd = applyPlaceholders(raw, player);
+            if (cmd.isEmpty()) continue;
             try {
-                if (Bukkit.getPlayerExact(cmd.getMcUsername()) == null) return;
-                
-                // Chặn lặp lại ngay lập tức
-                if (!processedIds.add(cmd.getId())) return;
-
-                String command = cmd.getCommand().trim();
-                if (command.contains("{user_name}")) command = command.replace("{user_name}", cmd.getMcUsername());
-                if (command.contains("{username}")) command = command.replace("{username}", cmd.getMcUsername());
-                
-                boolean success = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
-                
-                if (success && !command.startsWith("tellraw")) {
-                    logger.info("✅ Đã giao vật phẩm thành công cho: " + cmd.getMcUsername());
+                boolean ok = Bukkit.dispatchCommand(console, cmd);
+                if (!ok) {
+                    error = "Lệnh không thực thi được: " + cmd;
+                    break;
                 }
-
-                deleteCommand(cmd);
+                ran++;
             } catch (Exception e) {
-                deleteCommand(cmd);
+                error = "Lỗi khi chạy lệnh '" + cmd + "': " + e.getClass().getSimpleName()
+                        + (e.getMessage() != null ? " - " + e.getMessage() : "");
+                break;
             }
-        });
-    }
-    
-    /**
-     * Xóa command khỏi Supabase im lặng
-     */
-    private void deleteCommand(Order cmd) {
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            try {
-                URL url = new URL(supabaseUrl + "/rest/v1/pending_commands?id=eq." + cmd.getId());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("DELETE");
-                conn.setRequestProperty("apikey", supabaseAnonKey);
-                conn.setRequestProperty("Authorization", "Bearer " + supabaseAnonKey);
-                conn.getResponseCode(); // Execute delete
-            } catch (Exception ignored) {}
-        });
-    }
-    
-    /**
-     * Inner class để lưu thông tin Order
-     */
-    private static class Order {
-        private String id;
-        private String mcUsername;
-        private String product;
-        private String command;
-        private String status;
-        private String notes;
-        private double price;
-        private boolean delivered;
-        private String discordMessageId;
-        
-        // Getters and Setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        
-        public String getMcUsername() { return mcUsername; }
-        public void setMcUsername(String mcUsername) { this.mcUsername = mcUsername; }
-        
-        public String getProduct() { return product; }
-        public void setProduct(String product) { this.product = product; }
-        
-        public String getCommand() { return command; }
-        public void setCommand(String command) { this.command = command; }
-        
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        
-        public String getNotes() { return notes; }
-        public void setNotes(String notes) { this.notes = notes; }
-        
-        public double getPrice() { return price; }
-        public void setPrice(double price) { this.price = price; }
-        
-        public boolean isDelivered() { return delivered; }
-        public void setDelivered(boolean delivered) { this.delivered = delivered; }
+        }
 
-        public String getDiscordMessageId() { return discordMessageId; }
-        public void setDiscordMessageId(String discordMessageId) { this.discordMessageId = discordMessageId; }
+        if (error != null) {
+            failedCount.incrementAndGet();
+            getLogger().warning("❌ Giao thất bại '" + product + "' cho " + player.getName() + ": " + error);
+            return new BridgeClient.Result(d.id, false, truncate(error, 500));
+        }
+
+        deliveredCount.incrementAndGet();
+        getLogger().info("✅ Đã giao '" + product + "' cho " + player.getName() + " (" + ran + " lệnh)");
+        notifyPlayer(player, product);
+        return new BridgeClient.Result(d.id, true, "Đã giao " + ran + " lệnh cho " + player.getName());
+    }
+
+    private String applyPlaceholders(String raw, Player player) {
+        String cmd = raw.trim();
+        while (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+        return cmd.replace("{username}", player.getName())
+                .replace("{user_name}", player.getName())
+                .replace("{player}", player.getName())
+                .replace("{uuid}", player.getUniqueId().toString());
+    }
+
+    private void notifyPlayer(Player player, String product) {
+        FileConfiguration cfg = getConfig();
+        try {
+            if (cfg.getBoolean("notify.chat.enabled", true)) {
+                for (String line : cfg.getStringList("notify.chat.messages")) {
+                    player.sendMessage(color(line.replace("{product}", product).replace("{player}", player.getName())));
+                }
+            }
+            if (cfg.getBoolean("notify.title.enabled", true)) {
+                player.sendTitle(
+                        color(cfg.getString("notify.title.title", "&6&lCẢM ƠN BẠN!").replace("{product}", product)),
+                        color(cfg.getString("notify.title.subtitle", "&fĐã nhận &e{product}").replace("{product}", product)),
+                        10, 60, 20);
+            }
+            if (cfg.getBoolean("notify.sound.enabled", true)) {
+                Sound sound;
+                try {
+                    sound = Sound.valueOf(cfg.getString("notify.sound.name", "ENTITY_PLAYER_LEVELUP").toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ex) {
+                    sound = Sound.ENTITY_PLAYER_LEVELUP;
+                }
+                player.playSound(player.getLocation(), sound, 1.0f, 1.0f);
+            }
+        } catch (Exception e) {
+            getLogger().warning("Không gửi được thông báo cho " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    // ==================== Events ====================
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        requestPoll(60L); // ~3 giây sau khi vào server
+    }
+
+    // ==================== Command ====================
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!sender.hasPermission("bncshop.admin")) {
+            sender.sendMessage(color("&cBạn không có quyền dùng lệnh này."));
+            return true;
+        }
+        String sub = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : "status";
+
+        switch (sub) {
+            case "reload":
+                loadAndStart();
+                sender.sendMessage(color(prefix() + "&aĐã tải lại config."
+                        + (client == null ? " &c(Chưa có bridge.secret — không giao hàng)" : "")));
+                return true;
+
+            case "poll":
+                if (client == null) {
+                    sender.sendMessage(color(prefix() + "&cChưa cấu hình bridge.secret."));
+                    return true;
+                }
+                requestPoll(1L);
+                sender.sendMessage(color(prefix() + "&aĐã yêu cầu kiểm tra đơn hàng ngay."));
+                return true;
+
+            case "status":
+                sendStatus(sender);
+                return true;
+
+            default:
+                sender.sendMessage(color(prefix() + "&eDùng: /" + label + " <status|reload|poll>"));
+                return true;
+        }
+    }
+
+    private void sendStatus(CommandSender sender) {
+        SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss dd/MM");
+        String url = getConfig().getString("bridge.url", DEFAULT_URL);
+        List<String> lines = new ArrayList<>();
+        lines.add("&6&m-----&r &6&lBuildnChill Shop &7v" + getDescription().getVersion() + " &6&m-----");
+        lines.add("&7Bridge: &f" + url);
+        lines.add("&7Lần poll cuối: &f" + (lastPollAt == 0 ? "chưa" : fmt.format(new Date(lastPollAt))));
+        lines.add("&7Thành công cuối: &f" + (lastSuccessAt == 0 ? "chưa" : fmt.format(new Date(lastSuccessAt))));
+        lines.add("&7Đã giao: &a" + deliveredCount.get() + " &7| Thất bại: &c" + failedCount.get()
+                + " &7| Chờ gửi kết quả: &e" + pendingResults.size());
+        lines.add("&7Lỗi gần nhất: " + (lastError == null ? "&akhông có" : "&c" + lastError));
+        for (String l : lines) sender.sendMessage(color(l));
+
+        BridgeClient bridge = client;
+        if (bridge == null) {
+            sender.sendMessage(color("&cChưa cấu hình bridge.secret — không thể ping."));
+            return;
+        }
+        sender.sendMessage(color("&7Đang ping bridge..."));
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            long start = System.currentTimeMillis();
+            String msg;
+            try {
+                bridge.ping();
+                msg = "&aPing bridge OK &7(" + (System.currentTimeMillis() - start) + "ms)";
+            } catch (BridgeClient.BridgeException e) {
+                msg = "&cPing thất bại: " + e.getMessage();
+            }
+            final String out = msg;
+            Bukkit.getScheduler().runTask(this, () -> sender.sendMessage(color(out)));
+        });
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1 && sender.hasPermission("bncshop.admin")) {
+            List<String> out = new ArrayList<>();
+            for (String s : Arrays.asList("status", "reload", "poll")) {
+                if (s.startsWith(args[0].toLowerCase(Locale.ROOT))) out.add(s);
+            }
+            return out;
+        }
+        return Collections.emptyList();
+    }
+
+    // ==================== Helpers ====================
+
+    private String prefix() {
+        return getConfig().getString("notify.prefix", "&8[&6BnC-Shop&8] ");
+    }
+
+    private static String color(String s) {
+        return ChatColor.translateAlternateColorCodes('&', s == null ? "" : s);
+    }
+
+    private static String truncate(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max);
     }
 }
-

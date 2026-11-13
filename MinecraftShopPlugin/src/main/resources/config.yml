@@ -1,21 +1,42 @@
 # ============================================
-# MINECRAFT SHOP PLUGIN - CONFIG
+#  BUILDNCHILL SHOP v2 - CONFIG
+#  Tự động giao vật phẩm mua trên website vào game
 # ============================================
 
-# Supabase Configuration
-supabase:
-  # URL Supabase project (lấy từ Supabase Dashboard > Settings > API)
-  url: "https://byaxtcrajucaifflanmd.supabase.co"
+bridge:
+  # Địa chỉ Netlify plugin bridge của website
+  url: "https://buildnchill.id.vn/api/plugin-bridge"
 
-  # Anon key (lấy từ Supabase Dashboard > Settings > API)
-  anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5YXh0Y3JhanVjYWlmZmxhbm1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxNjAwNDQsImV4cCI6MjA4MjczNjA0NH0.H7Q33o_KJMH3ZqoAZWyz5Mh67rBZjLLz74iQGrIsh9g"
+  # Khóa bí mật - PHẢI TRÙNG với biến môi trường PLUGIN_SECRET trên Netlify
+  # (Netlify > Project configuration > Environment variables)
+  # Không chia sẻ khóa này cho ai khác.
+  secret: "DOI_THANH_PLUGIN_SECRET"
 
-# Polling Configuration
 poll:
-  # Khoảng thời gian giữa các lần poll (giây)
-  # Khuyến nghị: 10-20 giây
-  interval_seconds: 15
+  # Bao nhiêu giây kiểm tra đơn hàng mới một lần (tối thiểu 3, khuyến nghị 10)
+  interval_seconds: 10
 
-# Discord Webhook (Dùng để cập nhật trạng thái đơn hàng sang màu xanh lá)
-discord:
-  webhook_url: "https://discord.com/api/webhooks/..."
+notify:
+  # Tiền tố cho tin nhắn lệnh /bncshop
+  prefix: "&8[&6BnC-Shop&8] "
+
+  # Tin nhắn chat gửi cho người chơi khi nhận hàng thành công
+  # Biến: {product} = tên sản phẩm, {player} = tên người chơi. Hỗ trợ mã màu &
+  chat:
+    enabled: true
+    messages:
+      - "&8&m------------------------------"
+      - "&6&l✦ BnC-Shop &8» &aĐã giao thành công: &e{product}"
+      - "&7Cảm ơn &f{player} &7đã ủng hộ máy chủ BuildnChill! &c❤"
+      - "&8&m------------------------------"
+
+  # Tiêu đề hiện giữa màn hình
+  title:
+    enabled: true
+    title: "&6&lCẢM ƠN BẠN!"
+    subtitle: "&fĐã nhận &e{product}"
+
+  # Âm thanh khi nhận hàng (tên theo org.bukkit.Sound)
+  sound:
+    enabled: true
+    name: "ENTITY_PLAYER_LEVELUP"

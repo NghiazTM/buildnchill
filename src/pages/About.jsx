@@ -1,141 +1,159 @@
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Helmet } from 'react-helmet-async';
-import { BiServer, BiCube, BiGroup, BiTrophy, BiShield, BiHeart, BiAnchor, BiCompass } from 'react-icons/bi';
+import { BiRocket, BiGroup, BiBuildings, BiShieldQuarter, BiCopy, BiCube, BiStore } from 'react-icons/bi';
+import { FaDiscord } from 'react-icons/fa';
 import { useData } from '../context/DataContext';
-import SummerEffect from '../components/SummerEffect';
-import '../styles/summer-theme.css';
+import { PageHero, SectionTitle, Seo, useCopy } from '../components/ui';
+import { FEATURES, HOW_TO_JOIN } from '../data/siteContent';
+import '../styles/pages.css';
+
+const ICONS = { BiRocket, BiGroup, BiBuildings, BiShieldQuarter };
+
+const fadeUp = {
+  initial: { opacity: 0, y: 24 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-60px' },
+};
 
 const About = () => {
-  const { siteSettings } = useData();
-  const features = [
-    { icon: BiServer, title: 'Hoạt Động 24/7', description: 'Hệ thống máy chủ luôn sẵn sàng phục vụ hành trình của bạn mọi lúc.' },
-    { icon: BiCube, title: 'Xây Dựng Sáng Tạo', description: 'Thể hiện bản thân qua những công trình kỳ vĩ giữa đại dương xanh.' },
-    { icon: BiGroup, title: 'Cộng Đồng Vui Vẻ', description: 'Nơi kết nối hàng ngàn trái tim cùng đam mê Minecraft Việt Nam.' },
-    { icon: BiTrophy, title: 'Sự Kiện Mùa Hè', description: 'Tham gia các cuộc thi thú vị với phần quà hấp dẫn mỗi tuần.' },
-    { icon: BiShield, title: 'Môi Trường An Toàn', description: 'Luôn bảo vệ người chơi khỏi các hành vi gian lận và độc hại.' },
-    { icon: BiHeart, title: 'Hỗ Trợ Tận Tâm', description: 'Đội ngũ trực chiến hỗ trợ bạn giải quyết mọi vấn đề nhanh chóng.' }
+  const { siteSettings, serverStatus } = useData();
+  const copy = useCopy();
+  const title = siteSettings?.site_title || 'BuildnChill';
+  const ip = siteSettings?.server_ip || 'buildnchill.id.vn';
+  const online = serverStatus?.status === 'Online';
+
+  const stats = [
+    { v: online ? 'Online' : 'Offline', l: 'Trạng thái', cls: online ? 'text-success' : 'text-danger' },
+    { v: `${serverStatus?.players || 0}/${serverStatus?.maxPlayers || 0}`, l: 'Người chơi', cls: 'text-accent' },
+    { v: serverStatus?.version || siteSettings?.server_version || '1.21', l: 'Phiên bản', cls: '' },
+    { v: '24/7', l: 'Hoạt động', cls: '' },
   ];
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
-  };
-
   return (
-    <div className="shop-summer-container min-vh-100 py-5">
-      <Helmet>
-        <title>Giới Thiệu - BuildnChill Summer</title>
-        <meta name="description" content="Khám phá hành trình phiêu lưu tại BuildnChill, máy chủ Minecraft mùa hè năng động nhất." />
-      </Helmet>
-      <SummerEffect />
+    <>
+      <Seo title="Giới thiệu" description={`${title} - máy chủ Minecraft sinh tồn Việt Nam: cộng đồng thân thiện, gameplay mượt mà, sự kiện liên tục.`} path="/about" />
+      <PageHero
+        pill="Về chúng tôi"
+        title={`Về ${title}:`}
+        highlight="Xây dựng & Chill"
+        subtitle="Một máy chủ Minecraft sinh tồn tâm huyết — nơi bạn xây dựng thế giới riêng, kết bạn và tạo nên những kỷ niệm đáng nhớ."
+        crumbs={[{ label: 'Giới thiệu' }]}
+      />
 
-      <div className="container position-relative" style={{ zIndex: 10 }}>
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="row">
-            <div className="col-lg-10 mx-auto">
-              <div className="text-center mb-5">
-                <motion.div 
-                   animate={{ rotate: [0, 10, -10, 0] }} 
-                   transition={{ repeat: Infinity, duration: 5 }}
-                   className="d-inline-block mb-3"
-                >
-                   <BiCompass size={60} className="text-info" />
-                </motion.div>
-                <h1 className="summer-title display-3 mb-3">VỀ {siteSettings?.site_title?.toUpperCase() || 'BUILDNCHILL'}</h1>
-                <p className="h5 fw-bold text-primary">Khám Phá Hành Trình Đại Dương Tuyệt Vời 🌊</p>
+      {/* Intro */}
+      <section className="bnc-section pt-4">
+        <div className="container">
+          <div className="row align-items-center g-5">
+            <motion.div className="col-lg-7" {...fadeUp}>
+              <span className="bnc-pill">Câu chuyện</span>
+              <h2 className="bnc-heading">
+                Xây dựng thế giới, <span className="highlight">tạo nên kỷ niệm</span>
+              </h2>
+              <p className="text-soft">
+                {title} ra đời từ niềm đam mê Minecraft của một nhóm bạn trẻ Việt Nam. Chúng tôi muốn tạo ra một sân chơi
+                sinh tồn công bằng, ổn định và thân thiện — nơi người chơi mới cũng như lâu năm đều tìm thấy niềm vui.
+              </p>
+              <p className="text-soft">
+                Từ những căn nhà gỗ đầu tiên đến các thành phố đồ sộ, mỗi công trình trên máy chủ đều là dấu ấn của cộng
+                đồng. Đội ngũ quản trị luôn lắng nghe góp ý để không ngừng cải thiện trải nghiệm.
+              </p>
+              <div className="d-flex flex-wrap gap-2 mt-4">
+                <a href={siteSettings?.discord_url || 'https://discord.gg/buildnchill'} target="_blank" rel="noopener noreferrer" className="bnc-btn bnc-btn-discord">
+                  <FaDiscord /> Tham gia Discord
+                </a>
+                <Link to="/shop" className="bnc-btn bnc-btn-ghost"><BiStore /> Cửa hàng</Link>
               </div>
+            </motion.div>
+            <motion.div className="col-lg-5 text-center" {...fadeUp}>
+              <img src="/img/render-villager.png" alt="" className="bnc-art bnc-art-float" />
+            </motion.div>
+          </div>
 
-              <motion.div
-                className="summer-glass p-4 p-md-5 mb-5 shadow-2xl border-0"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <h3 className="fw-black text-primary mb-4 d-flex align-items-center gap-2">
-                  <BiAnchor className="text-info" /> CHÀO MỪNG BẠN ĐẾN VỚI CHÚNG TÔI
-                </h3>
-                <p className="fw-bold text-muted leading-relaxed" style={{ fontSize: '1.1rem' }}>
-                  {siteSettings?.site_title || 'BuildnChill'} là một máy chủ Minecraft tâm huyết, nơi hội tụ những tâm hồn yêu tự do và sáng tạo. 
-                  Trong mùa hè này, chúng tôi mang đến một làn gió mới với thế giới đại dương bao la, những hòn đảo bí ẩn và vô vàn 
-                  hoạt động hấp dẫn đang chờ bạn khám phá. Sứ mệnh của BuildnChill là tạo dựng một cộng đồng văn minh, vui vẻ và 
-                  gắn kết, nơi mọi người đều có thể tỏa sáng.
-                </p>
-              </motion.div>
-
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="mb-5"
-              >
-                <h3 className="summer-title text-center mb-5" style={{ fontSize: '2rem' }}>
-                  NHỮNG TRẢI NGHIỆM ĐẶC BIỆT 🐬
-                </h3>
-                <div className="row g-4">
-                  {features.map((feature, index) => {
-                    const Icon = feature.icon;
-                    return (
-                      <motion.div
-                        key={index}
-                        className="col-md-6 col-lg-4"
-                        variants={itemVariants}
-                        whileHover={{ y: -10 }}
-                      >
-                        <div className="summer-glass h-100 p-4 border-0 shadow-xl bg-white bg-opacity-80 text-center">
-                          <div className="d-inline-flex p-3 rounded-4 bg-info bg-opacity-10 text-info mb-4 shadow-sm">
-                            <Icon size={45} />
-                          </div>
-                          <h5 className="fw-black text-primary mb-3">{feature.title}</h5>
-                          <p className="fw-bold text-muted small mb-0">{feature.description}</p>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+          <div className="row g-3 mt-5">
+            {stats.map((s) => (
+              <div key={s.l} className="col-6 col-md-3">
+                <div className="bnc-feature-box bnc-stat h-100">
+                  <div className={`v ${s.cls}`}>{s.v}</div>
+                  <div className="l">{s.l}</div>
                 </div>
-              </motion.div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-              <motion.div
-                className="summer-glass p-4 p-md-5 shadow-2xl border-0 bg-info bg-opacity-10"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-              >
-                <div className="row align-items-center g-4">
-                   <div className="col-md-8">
-                      <h3 className="fw-black text-primary mb-3">BẮT ĐẦU CUỘC PHIÊU LƯU NGAY!</h3>
-                      <p className="fw-bold text-muted m-0">
-                        Đừng để mùa hè trôi qua một cách tẻ nhạt. Hãy kết nối với chúng tôi ngay hôm nay và cùng viết nên những 
-                        câu chuyện huyền thoại trên biển cả. BuildnChill đang chờ đón sự xuất hiện của bạn!
-                      </p>
-                   </div>
-                   <div className="col-md-4 text-center">
-                      <div className="p-3 bg-white rounded-4 shadow-xl border-3 border-info border-dashed">
-                         <div className="small fw-black text-muted mb-1">SERVER IP</div>
-                         <div className="h4 fw-black text-info m-0">{siteSettings?.server_ip || 'buildnchill.id.vn'}</div>
-                      </div>
-                   </div>
-                </div>
-              </motion.div>
+      {/* Features */}
+      <section className="bnc-section bnc-section-alt">
+        <div className="container">
+          <SectionTitle pill="Điểm nổi bật" title="Vì sao chọn" highlight={title} subtitle="Những điều làm nên trải nghiệm khác biệt tại máy chủ của chúng tôi." />
+          <div className="row g-4">
+            {FEATURES.map((f, i) => {
+              const Icon = ICONS[f.icon] || BiCube;
+              return (
+                <motion.div key={f.title} className="col-sm-6 col-lg-3" {...fadeUp} transition={{ delay: i * 0.06 }}>
+                  <div className="bnc-card bnc-card-hover bnc-card-pad h-100">
+                    <span className="bnc-icon-box mb-3"><Icon size={26} /></span>
+                    <h3 className="h5 fw-black">{f.title}</h3>
+                    <p className="text-soft small mb-0">{f.text}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* How to join */}
+      <section className="bnc-section">
+        <div className="container">
+          <div className="row align-items-center g-5">
+            <motion.div className="col-lg-4 text-center order-lg-2" {...fadeUp}>
+              <img src="/img/render-enderdragon.png" alt="" className="bnc-art bnc-art-float" />
+            </motion.div>
+            <div className="col-lg-8 order-lg-1">
+              <SectionTitle pill="Bắt đầu" title="Tham gia chỉ với" highlight="3 bước" center={false} />
+              <div className="d-flex flex-column gap-3">
+                {HOW_TO_JOIN.map((s, i) => (
+                  <motion.div key={s.title} className="bnc-card bnc-card-hover p-4 d-flex gap-3 align-items-start" {...fadeUp} transition={{ delay: i * 0.08 }}>
+                    <span className="bnc-step-num">{i + 1}</span>
+                    <div className="min-w-0">
+                      <h3 className="h6 fw-black mb-1">{s.title}</h3>
+                      <p className="text-soft small mb-0">{s.text}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              <div className="bnc-ip-box">
+                <code>{ip}</code>
+                <button className="bnc-btn bnc-btn-sm" onClick={() => copy(ip, 'Đã sao chép IP máy chủ')}>
+                  <BiCopy /> Copy IP
+                </button>
+              </div>
             </div>
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </section>
 
-      {/* Decorative items */}
-      <div className="summer-item" style={{ bottom: '5%', right: '5%', fontSize: '40px' }}>🐚</div>
-      <div className="summer-item" style={{ top: '15%', left: '5%', fontSize: '50px' }}>🌴</div>
-    </div>
+      {/* CTA */}
+      <section className="bnc-section pt-0">
+        <div className="container">
+          <motion.div className="bnc-cta" {...fadeUp}>
+            <div className="row align-items-center g-4">
+              <div className="col-lg-8">
+                <h2 className="bnc-heading mt-0">Sẵn sàng cho <span className="highlight">cuộc phiêu lưu</span>?</h2>
+                <p className="text-soft mb-0">Vào Discord để nhận thông báo sự kiện, quà tặng và hỗ trợ nhanh nhất từ đội ngũ.</p>
+              </div>
+              <div className="col-lg-4 d-flex flex-wrap gap-2 justify-content-lg-end">
+                <a href={siteSettings?.discord_url || 'https://discord.gg/buildnchill'} target="_blank" rel="noopener noreferrer" className="bnc-btn bnc-btn-discord">
+                  <FaDiscord /> Discord
+                </a>
+                <Link to="/shop" className="bnc-btn">Cửa hàng</Link>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+    </>
   );
 };
 
