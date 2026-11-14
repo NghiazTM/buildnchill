@@ -25,7 +25,7 @@ const Footer = () => {
           <div className="col-lg-4 col-md-6">
             <Link to="/" className="bnc-brand mb-3">
               <img src="/img/logo.png" alt="" width="48" height="48" />
-              <span><small>MINECRAFT</small>{title.toUpperCase()}</span>
+              <span>{title}</span>
             </Link>
             <p className="text-soft mb-4" style={{ maxWidth: 360 }}>
               Máy chủ Minecraft sinh tồn Việt Nam — xây dựng, khám phá và chill cùng cộng đồng thân thiện mỗi ngày.

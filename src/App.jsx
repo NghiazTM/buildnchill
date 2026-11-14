@@ -23,6 +23,7 @@ import Faq from './pages/Faq';
 import NotFound from './pages/NotFound';
 import 'react-quill/dist/quill.snow.css';
 import './styles/sunstone.css';
+import './styles/pro.css';
 
 const Admin = lazy(() => import('./pages/Admin'));
 

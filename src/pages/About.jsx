@@ -65,7 +65,7 @@ const About = () => {
               </div>
             </motion.div>
             <motion.div className="col-lg-5 text-center" {...fadeUp}>
-              <img src="/img/render-villager.png" alt="" className="bnc-art bnc-art-float" />
+              <figure className="bnc-frame mb-0"><img src="/img/hero-bg.jpg" alt="Thế giới BuildnChill" loading="lazy" /></figure>
             </motion.div>
           </div>
 
@@ -108,7 +108,7 @@ const About = () => {
         <div className="container">
           <div className="row align-items-center g-5">
             <motion.div className="col-lg-4 text-center order-lg-2" {...fadeUp}>
-              <img src="/img/render-enderdragon.png" alt="" className="bnc-art bnc-art-float" />
+              <figure className="bnc-frame mb-0"><img src="/img/blog-cover.jpg" alt="Tham gia BuildnChill" loading="lazy" /></figure>
             </motion.div>
             <div className="col-lg-8 order-lg-1">
               <SectionTitle pill="Bắt đầu" title="Tham gia chỉ với" highlight="3 bước" center={false} />

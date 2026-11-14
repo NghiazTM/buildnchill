@@ -57,8 +57,8 @@ const Navbar = () => {
           <Link to="/" className="bnc-brand" aria-label={`${title} - Trang chủ`}>
             <img src="/img/logo.png" alt="" width="48" height="48" />
             <span>
-              <small>MINECRAFT</small>
-              {title.toUpperCase()}
+
+              {title}
             </span>
           </Link>
 

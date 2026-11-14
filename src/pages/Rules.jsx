@@ -71,7 +71,7 @@ const Rules = () => {
                     </div>
                     {g.rules.map((r, ri) => (
                       <div key={r} className="bnc-rule">
-                        <span className="sq">■</span>
+                        <span className="sq" aria-hidden="true" />
                         <span className="idx">{gi + 1}.{ri + 1}</span>
                         <span className="min-w-0">{r}</span>
                       </div>

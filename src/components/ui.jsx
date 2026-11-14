@@ -2,17 +2,15 @@ import { createContext, useCallback, useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
-/* ---------- Curved divider (Sunstone) ---------- */
-export const Divider = ({ deep = false }) => (
-  <div className={`bnc-divider ${deep ? 'to-deep' : ''}`} aria-hidden="true">
-    <svg viewBox="0 0 1200 120" preserveAspectRatio="none">
-      <path d="M600,112.77C268.63,112.77,0,65.52,0,7.23V120H1200V7.23C1200,65.52,931.37,112.77,600,112.77Z" className="shape-fill" />
-    </svg>
-  </div>
+/* ---------- Divider: giữ export để tương thích, không còn đường cong ---------- */
+export const Divider = () => null;
+
+export const Eyebrow = ({ index, children, className = '' }) => (
+  <div className={`bnc-eyebrow ${className}`}>{index && <span className="idx">{index}</span>}{children}</div>
 );
 
 /* ---------- Page hero for inner pages ---------- */
-export const PageHero = ({ pill, title, highlight, subtitle, crumbs = [], children, deep = false }) => (
+export const PageHero = ({ pill, title, highlight, subtitle, crumbs = [], children }) => (
   <section className="bnc-page-hero">
     <div className="container">
       <div className="bnc-crumbs mb-3">
@@ -24,22 +22,21 @@ export const PageHero = ({ pill, title, highlight, subtitle, crumbs = [], childr
           </span>
         ))}
       </div>
-      {pill && <span className="bnc-pill">{pill}</span>}
+      {pill && <Eyebrow>{pill}</Eyebrow>}
       <h1>
-        {title} {highlight && <span className="highlight">{highlight}</span>}
+        {title}{highlight && <> <span className="highlight">{highlight}</span></>}
       </h1>
       {subtitle && <p className="bnc-sub mb-0">{subtitle}</p>}
       {children}
     </div>
-    <Divider deep={deep} />
   </section>
 );
 
 export const SectionTitle = ({ pill, title, highlight, subtitle, center = true }) => (
   <div className={`mb-5 ${center ? 'bnc-center' : ''}`}>
-    {pill && <span className="bnc-pill">{pill}</span>}
+    {pill && <Eyebrow>{pill}</Eyebrow>}
     <h2 className="bnc-heading">
-      {title} {highlight && <span className="highlight">{highlight}</span>}
+      {title}{highlight && <> <span className="highlight">{highlight}</span></>}
     </h2>
     {subtitle && <p className="bnc-sub">{subtitle}</p>}
   </div>
@@ -98,7 +95,7 @@ export const useCopy = () => {
   return useCallback(async (text, label = 'Đã sao chép') => {
     try {
       await navigator.clipboard.writeText(String(text));
-      toast(`✓ ${label}`, 'success', 1800);
+      toast(label, 'success', 1800);
     } catch {
       toast('Không sao chép được, hãy chọn và copy thủ công', 'error');
     }

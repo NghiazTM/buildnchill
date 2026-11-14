@@ -14,10 +14,10 @@ const TopBar = () => {
     <div className="bnc-strip">
       <div className="container bnc-strip-inner">
         <span className="d-none d-md-inline">
-          ⚡ Mua vật phẩm — giao tự động vào game chỉ trong vài giây! <Link to="/shop" className="text-decoration-underline">Ghé cửa hàng →</Link>
+          Vật phẩm được giao tự động vào game ngay sau khi thanh toán. <Link to="/shop" className="bnc-strip-link">Đến cửa hàng</Link>
         </span>
         <span className="d-flex align-items-center gap-3 ms-auto">
-          <span className="text-nowrap">{online ? <>● {serverStatus?.players || 0}<span className="d-none d-sm-inline"> người đang chơi</span><span className="d-sm-none"> online</span></> : <>● <span className="d-none d-sm-inline">Máy chủ đang </span>bảo trì</>}</span>
+          <span className="text-nowrap"><span className={`dot ${online ? 'dot-green' : 'dot-red'}`} />{online ? <>{serverStatus?.players || 0}<span className="d-none d-sm-inline"> người đang chơi</span><span className="d-sm-none"> online</span></> : <><span className="d-none d-sm-inline">Máy chủ đang </span>bảo trì</>}</span>
           <button className="text-nowrap text-truncate" style={{ maxWidth: '62vw' }} onClick={() => copy(ip, 'Đã sao chép IP máy chủ')} title="Sao chép IP">
             <BiCopy className="me-1" />{ip}
           </button>
