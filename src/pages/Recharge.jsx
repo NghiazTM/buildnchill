@@ -5,16 +5,11 @@ import { BiCopy, BiQrScan, BiCheckCircle, BiTime, BiSupport, BiWallet, BiHistory
 import { useData } from '../context/DataContext';
 import { PageHero, Seo, Spinner, useCopy, useToast } from '../components/ui';
 import { formatVnd, mcHead } from '../lib/api';
+import { envBankAccount, fetchBankAccounts, vietQrUrl } from '../lib/banks';
+import BankPicker from '../components/BankPicker';
 
 const PRESETS = [20000, 50000, 100000, 200000, 500000, 1000000];
 const MIN = 10000;
-
-const bank = {
-  code: import.meta.env.VITE_BANK_CODE || 'MB',
-  account: import.meta.env.VITE_BANK_ACCOUNT,
-  name: import.meta.env.VITE_BANK_NAME || 'MB Bank',
-  holder: import.meta.env.VITE_BANK_ACCOUNT_NAME,
-};
 
 const Recharge = () => {
   const navigate = useNavigate();
@@ -25,6 +20,15 @@ const Recharge = () => {
   const [custom, setCustom] = useState('');
   const [credited, setCredited] = useState(null);
   const baseline = useRef(null);
+  const [banks, setBanks] = useState(() => { const e = envBankAccount(); return e ? [e] : []; });
+  const [bankId, setBankId] = useState(null);
+  const bank = banks.find((b) => b.id === bankId) || banks[0] || null;
+
+  useEffect(() => {
+    let alive = true;
+    fetchBankAccounts().then((list) => { if (alive && list.length) setBanks(list); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (authInitialized && !isAuthenticated) navigate('/login');
@@ -55,7 +59,7 @@ const Recharge = () => {
   const value = custom ? Math.round(Number(custom)) : amount;
   const valid = Number.isFinite(value) && value >= MIN;
   const content = `NAP ${userProfile.username}`;
-  const qr = `https://img.vietqr.io/image/${bank.code}-${bank.account}-compact2.png?${new URLSearchParams({ amount: String(value), addInfo: content, accountName: bank.holder || '' })}`;
+  const qr = bank ? vietQrUrl({ bin: bank.bank_code, account: bank.account, accountName: bank.account_name, amount: value, content }) : '';
 
   return (
     <>
@@ -115,18 +119,20 @@ const Recharge = () => {
 
                 <hr className="my-4" />
 
+                <BankPicker banks={banks} value={bank?.id} onChange={setBankId} />
+
                 <div className="row g-4 align-items-center">
                   <div className="col-md-6 text-center">
                     <AnimatePresence mode="wait">
-                      {valid && bank.account ? (
-                        <motion.div key={value} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                      {valid && bank?.account ? (
+                        <motion.div key={`${bank.id}-${value}`} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                           <div className="bnc-qr"><img src={qr} alt={`QR nạp ${formatVnd(value)}`} /></div>
                           <div className="small text-soft mt-3"><BiQrScan className="me-1" />Quét bằng app ngân hàng bất kỳ</div>
                         </motion.div>
                       ) : (
                         <div className="bnc-card-flat bnc-empty">
                           <BiQrScan size={56} className="mb-2" />
-                          <div>{bank.account ? 'Nhập số tiền để tạo mã QR' : 'Chưa cấu hình tài khoản nhận tiền'}</div>
+                          <div>{bank?.account ? 'Nhập số tiền để tạo mã QR' : 'Chưa cấu hình tài khoản nhận tiền'}</div>
                         </div>
                       )}
                     </AnimatePresence>
@@ -138,9 +144,9 @@ const Recharge = () => {
                       <button className="bnc-copy" onClick={() => copy(content, 'Đã sao chép nội dung')}><BiCopy /></button>
                     </div>
                     <div className="bnc-kv"><span className="k">Số tiền</span><span className="v text-accent">{valid ? formatVnd(value) : '—'}</span></div>
-                    <div className="bnc-kv"><span className="k">Ngân hàng</span><span className="v">{bank.name}</span></div>
-                    <div className="bnc-kv"><span className="k">Số TK</span><span className="v">{bank.account}<button className="bnc-copy" onClick={() => copy(bank.account, 'Đã sao chép số tài khoản')}><BiCopy /></button></span></div>
-                    <div className="bnc-kv"><span className="k">Chủ TK</span><span className="v">{bank.holder}</span></div>
+                    <div className="bnc-kv"><span className="k">Ngân hàng</span><span className="v">{bank?.bank_name || '—'}</span></div>
+                    <div className="bnc-kv"><span className="k">Số TK</span><span className="v">{bank?.account || '—'}{bank?.account && <button className="bnc-copy" onClick={() => copy(bank.account, 'Đã sao chép số tài khoản')}><BiCopy /></button>}</span></div>
+                    <div className="bnc-kv"><span className="k">Chủ TK</span><span className="v">{bank?.account_name || '—'}</span></div>
                     <div className="d-flex align-items-center gap-2 mt-3 small text-soft">
                       <span className="bnc-pulse text-accent" /> Đang chờ giao dịch — số dư tự cập nhật.
                     </div>

@@ -136,10 +136,16 @@ public class BridgeClient {
         send(request(withQuery("ping=1")).GET().build());
     }
 
-    /** GET ?online=... → danh sách đơn cần giao cho người chơi đang online. */
-    public List<Delivery> fetch(Collection<String> onlineNames) throws BridgeException {
+    /**
+     * GET ?online=...&count=..&max=..&version=..
+     * Vừa là nhịp tim (web hiển thị máy chủ Online + số người chơi), vừa lấy đơn cần giao.
+     */
+    public List<Delivery> fetch(Collection<String> onlineNames, int maxPlayers, String version) throws BridgeException {
         String joined = String.join(",", onlineNames);
-        String q = "online=" + URLEncoder.encode(joined, StandardCharsets.UTF_8);
+        String q = "online=" + URLEncoder.encode(joined, StandardCharsets.UTF_8)
+                + "&count=" + onlineNames.size()
+                + "&max=" + Math.max(0, maxPlayers)
+                + "&version=" + URLEncoder.encode(version == null ? "" : version, StandardCharsets.UTF_8);
         JsonObject obj = send(request(withQuery(q)).GET().build());
 
         List<Delivery> list = new ArrayList<>();

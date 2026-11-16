@@ -1,6 +1,6 @@
 // GET /api/shop-order?id=<order uuid>
 // Trạng thái công khai tối thiểu của một đơn (dùng để trang thanh toán tự cập nhật).
-import { getAdmin, ok, fail, bankInfo, qrUrl } from '../lib/common.js';
+import { getAdmin, ok, fail, getBankAccounts, bankPayload } from '../lib/common.js';
 
 export const handler = async (event) => {
   if (event.httpMethod !== 'GET') return fail(405, 'Method not allowed');
@@ -31,17 +31,12 @@ export const handler = async (event) => {
     const price = Math.round(Number(o.price || 0));
     const remaining = Math.max(0, price - Number(o.amount_paid || 0));
     const payable = ['pending', 'underpaid'].includes(status) && o.payment_code && remaining > 0;
-    const bank = bankInfo();
+    const accounts = payable ? await getBankAccounts(sb) : [];
+    const banks = accounts.map((a) => bankPayload(a, remaining, o.payment_code));
 
     return ok({
-      bank: payable ? {
-        bank_name: bank.bankName,
-        account: bank.account,
-        account_name: bank.accountName,
-        content: o.payment_code,
-        amount: remaining,
-        qr_url: qrUrl(remaining, o.payment_code),
-      } : null,
+      bank: banks[0] || null,
+      banks,
       order: {
         id: o.id,
         status,

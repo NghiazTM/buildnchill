@@ -136,9 +136,10 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
 
             List<BridgeClient.Result> results = new ArrayList<>();
 
-            // 2. Lấy đơn cần giao
+            // 2. Nhịp tim + lấy đơn cần giao (luôn gọi, kể cả khi không ai online, để web biết máy chủ đang chạy)
+            String mcVersion = Bukkit.getBukkitVersion().split("-")[0];
+            List<BridgeClient.Delivery> deliveries = bridge.fetch(online, Bukkit.getMaxPlayers(), mcVersion);
             if (!online.isEmpty()) {
-                List<BridgeClient.Delivery> deliveries = bridge.fetch(online);
                 List<BridgeClient.Delivery> toRun = new ArrayList<>();
 
                 for (BridgeClient.Delivery d : deliveries) {

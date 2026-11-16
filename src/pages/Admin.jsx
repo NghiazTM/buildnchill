@@ -12,13 +12,14 @@ import UserManagement from '../components/UserManagement';
 import CarouselManagement from '../components/CarouselManagement';
 import WalletManagement from '../components/WalletManagement';
 import RechargeManagement from '../components/RechargeManagement';
+import PaymentAccountsManagement from '../components/PaymentAccountsManagement';
 import { Seo, StatusBadge, useToast } from '../components/ui';
 import { ORDER_STATUS, formatVnd, mcHead } from '../lib/api';
 import '../styles/admin.css';
 import {
   BiBarChart, BiNews, BiServer, BiCog, BiPlus, BiTrash, BiLogOutCircle, BiCheckCircle, BiEnvelope,
   BiCheck, BiImage, BiShoppingBag, BiUser, BiShow, BiWallet, BiCreditCard, BiRefresh, BiX,
-  BiCategory, BiPackage, BiErrorCircle, BiTime, BiEdit,
+  BiCategory, BiPackage, BiErrorCircle, BiTime, BiEdit, BiBuildingHouse,
 } from 'react-icons/bi';
 
 const CONTACT_STATUS = {
@@ -300,6 +301,7 @@ const Admin = () => {
         { id: 'categories', label: 'Danh mục', icon: BiCategory },
         { id: 'recharges', label: 'Nạp tiền', icon: BiCreditCard, count: stats.pendingRecharges || 0 },
         { id: 'wallets', label: 'Ví người dùng', icon: BiWallet },
+        { id: 'banks', label: 'Tài khoản nhận tiền', icon: BiBuildingHouse },
       ],
     },
     {
@@ -501,6 +503,7 @@ const Admin = () => {
           {activeTab === 'orders' && <ShopOrdersManagement />}
           {activeTab === 'recharges' && <RechargeManagement />}
           {activeTab === 'wallets' && <WalletManagement />}
+          {activeTab === 'banks' && <PaymentAccountsManagement />}
           {activeTab === 'carousel' && <CarouselManagement />}
 
           {activeTab === 'news' && (
@@ -593,7 +596,11 @@ const Admin = () => {
               <div className="bnc-admin-title">
                 <div>
                   <h2>Trạng thái máy chủ</h2>
-                  <p>Trạng thái thực tế được cập nhật tự động từ mcsrvstat khi admin truy cập website.</p>
+                  <p>
+                    {serverStatus?.source === 'plugin'
+                      ? <>Tự động từ plugin BuildnChillShop — nhịp tim gần nhất <b className="text-accent">{serverStatus.lastSeen ? new Date(serverStatus.lastSeen).toLocaleString('vi-VN') : '—'}</b>. Máy chủ hiển thị Online khi nhận nhịp tim trong 2,5 phút; giá trị đặt tay bên dưới sẽ bị ghi đè.</>
+                      : <>Chưa nhận nhịp tim từ plugin (cần plugin 2.1.0 + chạy STATUS_AND_BANKS_MIGRATION.sql) — website đang dùng trạng thái đặt tay bên dưới.</>}
+                  </p>
                 </div>
                 <button className="bnc-btn bnc-btn-sm" onClick={handleServerSave}><BiCheck size={18} /> Lưu thay đổi</button>
               </div>

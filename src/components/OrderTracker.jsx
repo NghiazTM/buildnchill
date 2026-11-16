@@ -5,6 +5,7 @@ import { BiCheckCircle, BiCopy, BiTime, BiErrorCircle, BiPackage, BiQrScan } fro
 import { api, formatVnd, mcHead, ORDER_STATUS } from '../lib/api';
 import { StatusBadge, useCopy } from './ui';
 import { useData } from '../context/DataContext';
+import BankPicker from './BankPicker';
 
 const LIVE = ['pending', 'underpaid', 'paid'];
 
@@ -47,11 +48,13 @@ const Steps = ({ status }) => {
  * Theo dõi 1 đơn hàng: hiện QR/thông tin chuyển khoản khi chờ thanh toán,
  * tự cập nhật trạng thái (4 giây/lần) đến khi giao xong.
  */
-const OrderTracker = ({ orderId, initialOrder = null, initialBank = null, onStatusChange }) => {
+const OrderTracker = ({ orderId, initialOrder = null, initialBank = null, initialBanks = null, onStatusChange }) => {
   const { siteSettings } = useData();
   const copy = useCopy();
   const [order, setOrder] = useState(initialOrder);
-  const [bank, setBank] = useState(initialBank);
+  const [banks, setBanks] = useState(initialBanks?.length ? initialBanks : (initialBank ? [initialBank] : []));
+  const [bankId, setBankId] = useState(null);
+  const bank = banks.find((b) => b.id === bankId) || banks[0] || null;
   const [error, setError] = useState('');
   const lastStatus = useRef(initialOrder?.status);
   const countdown = useCountdown(order?.status === 'pending' ? order?.expires_at : null);
@@ -66,7 +69,7 @@ const OrderTracker = ({ orderId, initialOrder = null, initialBank = null, onStat
         const res = await api('shop-order', { query: { id: orderId } });
         if (!alive) return;
         setOrder(res.order);
-        setBank(res.bank);
+        setBanks(res.banks?.length ? res.banks : (res.bank ? [res.bank] : []));
         setError('');
         if (res.order.status !== lastStatus.current) {
           lastStatus.current = res.order.status;
@@ -111,9 +114,14 @@ const OrderTracker = ({ orderId, initialOrder = null, initialBank = null, onStat
       {/* ---------- Chờ thanh toán ---------- */}
       {bank && (status === 'pending' || status === 'underpaid') && (
         <div className="row g-4 align-items-center">
+          {banks.length > 1 && (
+            <div className="col-12 pb-0">
+              <BankPicker banks={banks} value={bank?.id} onChange={setBankId} />
+            </div>
+          )}
           <div className="col-md-6 text-center">
             <div className="bnc-qr">
-              <img src={bank.qr_url} alt={`QR thanh toán ${bank.content}`} />
+              <img key={bank.id} src={bank.qr_url} alt={`QR thanh toán ${bank.content}`} />
             </div>
             <div className="small text-soft mt-3"><BiQrScan className="me-1" />Mở app ngân hàng và quét mã QR</div>
           </div>

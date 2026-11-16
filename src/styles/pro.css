@@ -477,3 +477,14 @@ code, .bnc-code, .bnc-mono { font-family: var(--bnc-mono); }
   .bnc-console-ip .act .t { display: none; }
   .bnc-console-ip .act { width: 32px; height: 32px; justify-content: center; border-radius: 8px; background: var(--bnc-surface-3); }
 }
+
+/* ---------- Chọn tài khoản ngân hàng ---------- */
+.bnc-bank-picker { margin-bottom: 1.25rem; }
+.bnc-bank-picker-label { font-size: .75rem; font-weight: 600; color: var(--bnc-text-dim, #71717a); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .5rem; }
+.bnc-bank-pills { display: flex; flex-wrap: wrap; gap: .5rem; }
+.bnc-bank-pill { display: inline-flex; align-items: baseline; gap: .5rem; padding: .55rem .9rem; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.02); color: #d4d4d8; font-size: .875rem; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.bnc-bank-pill .a { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .75rem; font-weight: 500; color: #71717a; }
+.bnc-bank-pill:hover { border-color: rgba(212,175,55,.45); color: #fff; }
+.bnc-bank-pill.active { border-color: #d4af37; background: rgba(212,175,55,.1); color: #fff; }
+.bnc-bank-pill.active .a { color: #d4af37; }
+@media (max-width: 575px) { .bnc-bank-pill { flex: 1 1 calc(50% - .5rem); justify-content: space-between; } }

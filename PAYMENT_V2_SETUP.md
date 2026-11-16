@@ -70,6 +70,17 @@ give {username} diamond 64
 3. Nạp thử ví `NAP <tên>` → số dư tự cập nhật, Discord kênh ngân hàng báo.
 4. Gửi thử 1 liên hệ → Discord kênh hỗ trợ báo; đổi trạng thái trong Admin → tin nhắn Discord tự cập nhật.
 
+## 6. Trạng thái máy chủ tự động + nhiều tài khoản nhận tiền (v2.1)
+
+1. Chạy `STATUS_AND_BANKS_MIGRATION.sql` trong Supabase → SQL Editor (chạy lại không sao).
+2. Thay plugin bằng `MinecraftShopPlugin-2.1.0.jar` (giữ nguyên `config.yml`), restart hoặc `/bncshop reload`.
+   - Mỗi 10 giây plugin gửi nhịp tim (số người online, giới hạn, phiên bản) → web hiện **Online** ngay.
+   - Không nhận nhịp tim quá 2,5 phút → web tự hiện **Bảo trì**.
+   - Lý do: host PikaMC chặn IP nước ngoài nên các API kiểm tra trạng thái (mcsrvstat…) luôn báo offline.
+3. Admin → **Tài khoản nhận tiền**: thêm/bật/tắt/sắp xếp nhiều ngân hàng. Người mua chọn ngân hàng khi thanh toán và khi nạp ví.
+   - Chưa thêm tài khoản nào → dùng tài khoản trong biến `BANK_*` / `VITE_BANK_*`.
+   - **Mỗi tài khoản phải được liên kết trong SePay** (cùng webhook) thì chuyển khoản mới tự xác nhận. Webhook nhận diện theo nội dung `BNCxxxxxx` / `NAP <tên>`, không phụ thuộc số tài khoản.
+
 ## Luồng hoạt động
 
 ```

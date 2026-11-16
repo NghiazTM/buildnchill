@@ -25,6 +25,16 @@ export const handler = async (event) => {
         .map((s) => s.trim())
         .filter((s) => /^[.*]?[A-Za-z0-9_]{1,16}$/.test(s))
         .slice(0, 500);
+
+      // Nhịp tim: mỗi lần plugin gọi = máy chủ đang chạy -> cập nhật trạng thái Online trên web
+      const toInt = (v) => (/^\d{1,6}$/.test(String(v ?? '')) ? Number(v) : null);
+      const { error: hbErr } = await sb.rpc('bnc_server_heartbeat', {
+        p_players: toInt(q.count) ?? names.length,
+        p_max: toInt(q.max),
+        p_version: q.version ? String(q.version).slice(0, 32) : null,
+      });
+      if (hbErr) console.warn('[plugin-bridge] heartbeat', hbErr.message);
+
       if (names.length === 0) return ok({ deliveries: [] });
 
       const { data, error } = await sb.rpc('bnc_claim_deliveries', { p_names: names, p_limit: 25 });

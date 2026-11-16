@@ -3,6 +3,19 @@ import { supabase } from '../supabaseClient';
 import { slugify } from '../utils/helpers';
 import { notifyDiscord } from '../lib/api';
 
+// Trạng thái máy chủ: ưu tiên nhịp tim từ plugin (last_seen), nếu chưa có thì dùng trạng thái admin đặt tay.
+// (Các dịch vụ kiểm tra ở nước ngoài như mcsrvstat bị host chặn -> luôn báo offline, nên không dùng nữa.)
+const HEARTBEAT_STALE_MS = 150000;
+export const statusFromRow = (row) => {
+  if (!row) return null;
+  const base = { players: row.players ?? '0', maxPlayers: row.max_players ?? '500', version: row.version || '1.20.4', lastSeen: row.last_seen || null };
+  if (row.last_seen) {
+    const fresh = Date.now() - new Date(row.last_seen).getTime() < HEARTBEAT_STALE_MS;
+    return { ...base, status: fresh ? 'Online' : 'Offline', players: fresh ? base.players : '0', source: 'plugin' };
+  }
+  return { ...base, status: row.status || 'Offline', source: 'manual' };
+};
+
 const DataContext = createContext();
 
 export const useData = () => {
@@ -244,16 +257,10 @@ export const DataProvider = ({ children }) => {
       if (carouselRes.data) setCarouselImages(carouselRes.data);
       if (settingsRes.data) {
         setSiteSettings(settingsRes.data);
-        refreshMinecraftStatus(settingsRes.data.server_ip, profile);
       }
       
       if (statusRes.data) {
-        setServerStatus({ 
-          status: statusRes.data.status, 
-          players: statusRes.data.players, 
-          maxPlayers: statusRes.data.max_players, 
-          version: statusRes.data.version 
-        });
+        setServerStatus(statusFromRow(statusRes.data));
       }
       setIsDataStale(false);
       lastFetchTimeRef.current = Date.now();
@@ -267,52 +274,13 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const refreshMinecraftStatus = async (ip, profile) => {
-    const activeProfile = profile || userProfile;
-    const serverIp = ip || siteSettings?.server_ip;
-    
-    if (!serverIp || serverIp === 'undefined') {
-      console.warn('[MC-API] Invalid server IP, skipping fetch');
-      return;
-    }
-
+  const refreshMinecraftStatus = async () => {
     try {
       setMcStatusLoading(true);
-      console.log(`[MC-API] START Fetching status for: ${serverIp}`);
-      const response = await fetch(`https://api.mcsrvstat.us/3/${serverIp}`);
-      
-      if (!response.ok) {
-        console.warn(`[MC-API] Failed to fetch MC status (URL: https://api.mcsrvstat.us/3/${serverIp}): ${response.status}`);
-        return;
-      }
-
-      const data = await response.json();
-      console.log('[MC-API] Response received');
-
-      if (data && data.online !== undefined) {
-        const newStatus = {
-          status: data.online ? 'Online' : 'Offline',
-          players: data.players?.online?.toString() || '0',
-          max_players: data.players?.max?.toString() || '500',
-          version: data.version || '1.20.4'
-        };
-
-        setServerStatus({
-          status: newStatus.status,
-          players: newStatus.players,
-          maxPlayers: newStatus.max_players,
-          version: newStatus.version
-        });
-
-        // Chỉ Admin mới được quyền ghi đè trạng thái lên Database
-        // Cẩn thận loop: fetch -> update db -> realtime event -> set state -> render
-        if (activeProfile?.role === 'admin') {
-          console.log('[MC-API] Admin detected, updating database status...');
-          await supabase.from('server_status').update(newStatus).eq('id', 1);
-        }
-      }
+      const { data, error } = await supabase.from('server_status').select('*').eq('id', 1).maybeSingle();
+      if (!error && data) setServerStatus(statusFromRow(data));
     } catch (error) {
-      console.error('[MC-API] Error fetching Minecraft status:', error);
+      console.error('[STATUS] refresh error:', error);
     } finally {
       setMcStatusLoading(false);
     }
@@ -609,7 +577,7 @@ export const DataProvider = ({ children }) => {
       if (statusInterval) clearInterval(statusInterval);
       statusInterval = setInterval(() => {
         refreshMinecraftStatus();
-      }, 300000);
+      }, 60000);
     };
 
     initializeAuth();
@@ -675,14 +643,7 @@ export const DataProvider = ({ children }) => {
 
     const dbChanges = supabase.channel('system_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'server_status' }, (payload) => {
-        if (payload.new) {
-          setServerStatus({
-            status: payload.new.status,
-            players: payload.new.players,
-            maxPlayers: payload.new.max_players,
-            version: payload.new.version
-          });
-        }
+        if (payload.new) setServerStatus(statusFromRow(payload.new));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, (payload) => {
         const currentId = userIdRef.current;

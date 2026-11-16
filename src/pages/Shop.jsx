@@ -74,7 +74,7 @@ const Checkout = ({ product, onClose }) => {
         <div className="bnc-modal-body">
           {result ? (
             <>
-              <OrderTracker orderId={result.order.id} initialOrder={result.order} initialBank={result.bank} />
+              <OrderTracker orderId={result.order.id} initialOrder={result.order} initialBank={result.bank} initialBanks={result.banks} />
               <div className="d-flex gap-2 justify-content-center mt-4 flex-wrap">
                 <button className="bnc-btn bnc-btn-dark bnc-btn-sm" onClick={onClose}>Tiếp tục mua sắm</button>
                 {isAuthenticated && <Link to="/profile#orders" className="bnc-btn bnc-btn-ghost bnc-btn-sm">Lịch sử đơn hàng</Link>}

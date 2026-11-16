@@ -4,7 +4,7 @@
 // - wallet: trừ tiền ví (cần đăng nhập) và đưa ngay vào hàng đợi giao vật phẩm
 import {
   getAdmin, getUser, ok, fail, parseBody, isValidMcName, makePaymentCode,
-  bankInfo, qrUrl, discordSend, orderEmbed, WEBHOOKS,
+  getBankAccounts, bankPayload, discordSend, orderEmbed, WEBHOOKS,
 } from '../lib/common.js';
 
 const ORDER_TTL_MIN = 30;
@@ -69,8 +69,8 @@ export const handler = async (event) => {
     }
 
     // ---------------- Chuyển khoản / QR ----------------
-    const bank = bankInfo();
-    if (!bank.account) return fail(500, 'Cửa hàng chưa cấu hình tài khoản nhận tiền');
+    const accounts = await getBankAccounts(sb);
+    if (!accounts.length) return fail(500, 'Cửa hàng chưa cấu hình tài khoản nhận tiền');
 
     // Tái sử dụng đơn chờ thanh toán còn hạn của cùng người chơi + sản phẩm (tránh tạo trùng khi bấm nhiều lần)
     const nowIso = new Date().toISOString();
@@ -128,13 +128,8 @@ export const handler = async (event) => {
         mc_username: mcUsername,
         expires_at: order.expires_at,
       },
-      bank: {
-        bank_name: bank.bankName,
-        account: bank.account,
-        account_name: bank.accountName,
-        content: order.payment_code,
-        qr_url: qrUrl(price, order.payment_code),
-      },
+      bank: bankPayload(accounts[0], price, order.payment_code),
+      banks: accounts.map((a) => bankPayload(a, price, order.payment_code)),
     });
   } catch (e) {
     console.error('[shop-checkout]', e);

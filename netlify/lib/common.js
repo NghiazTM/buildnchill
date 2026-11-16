@@ -90,11 +90,48 @@ export const bankInfo = () => {
   return { bin, account, accountName, bankName };
 };
 
-export const qrUrl = (amount, content) => {
-  const { bin, account, accountName } = bankInfo();
-  const params = new URLSearchParams({ amount: String(Math.round(amount)), addInfo: content, accountName });
-  return `https://img.vietqr.io/image/${bin}-${account}-compact2.png?${params.toString()}`;
+export const qrUrl = (amount, content, acc = null) => {
+  const { bin, account, accountName } = acc || bankInfo();
+  const params = new URLSearchParams({ amount: String(Math.round(amount)), addInfo: content, accountName: accountName || '' });
+  return `https://img.vietqr.io/image/${encodeURIComponent(bin)}-${encodeURIComponent(account)}-compact2.png?${params.toString()}`;
 };
+
+/**
+ * Danh sách tài khoản nhận tiền đang bật (bảng payment_accounts, admin quản lý).
+ * Nếu bảng chưa có / trống -> dùng tài khoản trong biến môi trường (BANK_* / VITE_BANK_*).
+ */
+export const getBankAccounts = async (sb) => {
+  try {
+    const { data, error } = await sb
+      .from('payment_accounts')
+      .select('id, bank_code, bank_name, account_number, account_name, note')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (!error && data?.length) {
+      return data.map((a) => ({
+        id: a.id, bin: a.bank_code, bankName: a.bank_name, account: a.account_number, accountName: a.account_name, note: a.note || '',
+      }));
+    }
+  } catch {
+    /* bảng chưa tồn tại -> fallback */
+  }
+  const env1 = bankInfo();
+  return env1.account ? [{ id: 'env', ...env1, note: '' }] : [];
+};
+
+/** Thông tin chuyển khoản trả về cho trình duyệt (mỗi tài khoản kèm QR riêng). */
+export const bankPayload = (acc, amount, content) => ({
+  id: acc.id,
+  bank_code: acc.bin,
+  bank_name: acc.bankName,
+  account: acc.account,
+  account_name: acc.accountName,
+  note: acc.note || '',
+  content,
+  amount,
+  qr_url: qrUrl(amount, content, acc),
+});
 
 export const siteUrl = () => env('URL', 'SITE_URL') || 'https://buildnchill.id.vn';
 
