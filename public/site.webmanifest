@@ -1,0 +1,16 @@
+{
+  "name": "BuildnChill - Server Minecraft Sinh Tồn Việt Nam",
+  "short_name": "BuildnChill",
+  "description": "Máy chủ Minecraft sinh tồn Việt Nam — xây dựng, cày cuốc, chill cùng cộng đồng.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "lang": "vi",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

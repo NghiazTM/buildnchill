@@ -65,7 +65,7 @@ const About = () => {
               </div>
             </motion.div>
             <motion.div className="col-lg-5 text-center" {...fadeUp}>
-              <figure className="bnc-frame mb-0"><img src="/img/hero-bg.jpg" alt="Thế giới BuildnChill" loading="lazy" /></figure>
+              <figure className="bnc-frame mb-0"><img src="/img/banner-christmas.jpg" alt="BNC Lands mùa Giáng Sinh" loading="lazy" /></figure>
             </motion.div>
           </div>
 

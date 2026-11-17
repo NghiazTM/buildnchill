@@ -49,6 +49,8 @@ export const Seo = ({ title, description, path }) => (
     {title && <meta property="og:title" content={`${title} | BuildnChill`} />}
     {description && <meta property="og:description" content={description} />}
     {path && <link rel="canonical" href={`https://buildnchill.id.vn${path}`} />}
+    {path && <meta property="og:url" content={`https://buildnchill.id.vn${path}`} />}
+    {title && <meta name="twitter:title" content={`${title} | BuildnChill`} />}
   </Helmet>
 );
 

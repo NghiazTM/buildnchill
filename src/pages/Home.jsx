@@ -185,7 +185,7 @@ const Home = () => {
             </motion.div>
             <motion.div className="col-lg-6" {...inView} custom={1}>
               <figure className="bnc-frame">
-                <img src={gallery[0]?.image_url || '/img/hero-bg.jpg'} alt={`Thế giới ${title}`} loading="lazy" />
+                <img src={gallery[0]?.image_url || '/img/banner-christmas.jpg'} alt={`Thế giới ${title}`} loading="lazy" />
               </figure>
             </motion.div>
           </div>
