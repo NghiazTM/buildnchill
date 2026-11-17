@@ -42,7 +42,7 @@ const Home = () => {
   const ip = siteSettings?.server_ip || 'buildnchill.id.vn';
   const title = siteSettings?.site_title || 'BuildnChill';
   const online = serverStatus?.status === 'Online';
-  const version = serverStatus?.version || siteSettings?.server_version || '1.21';
+  const version = serverStatus?.version || siteSettings?.server_version || '26.2';
   const players = Number(serverStatus?.players || 0);
   const maxPlayers = Number(serverStatus?.maxPlayers || serverStatus?.max_players || 0);
   const discord = siteSettings?.discord_url || 'https://discord.gg/buildnchill';

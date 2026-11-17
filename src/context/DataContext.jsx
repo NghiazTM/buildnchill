@@ -8,7 +8,7 @@ import { notifyDiscord } from '../lib/api';
 const HEARTBEAT_STALE_MS = 150000;
 export const statusFromRow = (row) => {
   if (!row) return null;
-  const base = { players: row.players ?? '0', maxPlayers: row.max_players ?? '500', version: row.version || '1.20.4', lastSeen: row.last_seen || null };
+  const base = { players: row.players ?? '0', maxPlayers: row.max_players ?? '500', version: row.version || '26.2', lastSeen: row.last_seen || null };
   if (row.last_seen) {
     const fresh = Date.now() - new Date(row.last_seen).getTime() < HEARTBEAT_STALE_MS;
     return { ...base, status: fresh ? 'Online' : 'Offline', players: fresh ? base.players : '0', source: 'plugin' };
@@ -71,12 +71,12 @@ export const DataProvider = ({ children }) => {
     status: 'Online',
     players: '0',
     maxPlayers: '500',
-    version: '1.20.4'
+    version: '26.2'
   }));
   const [contacts, setContacts] = useState(() => getPersistedData('contacts', []));
   const [siteSettings, setSiteSettings] = useState(() => getPersistedData('settings', {
     server_ip: 'buildnchill.id.vn',
-    server_version: '1.20.4',
+    server_version: '26.2',
     contact_email: 'admin@buildnchill.vn',
     site_title: 'BuildnChill'
   }));

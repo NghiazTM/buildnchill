@@ -25,7 +25,7 @@ const About = () => {
   const stats = [
     { v: online ? 'Online' : 'Offline', l: 'Trạng thái', cls: online ? 'text-success' : 'text-danger' },
     { v: `${serverStatus?.players || 0}/${serverStatus?.maxPlayers || 0}`, l: 'Người chơi', cls: 'text-accent' },
-    { v: serverStatus?.version || siteSettings?.server_version || '1.21', l: 'Phiên bản', cls: '' },
+    { v: serverStatus?.version || siteSettings?.server_version || '26.2', l: 'Phiên bản', cls: '' },
     { v: '24/7', l: 'Hoạt động', cls: '' },
   ];
 

@@ -49,7 +49,7 @@ const Admin = () => {
   });
   const [imageFile, setImageFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [serverForm, setServerForm] = useState({ status: 'Online', players: '', maxPlayers: '500', version: '1.20.4' });
+  const [serverForm, setServerForm] = useState({ status: 'Online', players: '', maxPlayers: '500', version: '26.2' });
   const [settingsForm, setSettingsForm] = useState({
     server_ip: '', server_version: '', contact_email: '', contact_phone: '', discord_url: '', site_title: '',
   });
@@ -175,7 +175,7 @@ const Admin = () => {
         status: serverStatus?.status || 'Online',
         players: serverStatus?.players || '0',
         maxPlayers: serverStatus?.maxPlayers || '500',
-        version: serverStatus?.version || '1.20.4',
+        version: serverStatus?.version || '26.2',
       });
       if (siteSettings) {
         setSettingsForm({
@@ -615,7 +615,7 @@ const Admin = () => {
                   </div>
                   <div className="col-md-6">
                     <label className="bnc-label">Phiên bản hỗ trợ</label>
-                    <input className="bnc-input" name="version" value={serverForm.version} onChange={handleServerChange} placeholder="VD: 1.21.4" />
+                    <input className="bnc-input" name="version" value={serverForm.version} onChange={handleServerChange} placeholder="VD: 26.2" />
                   </div>
                   <div className="col-md-6">
                     <label className="bnc-label">Số người chơi hiện tại</label>
@@ -651,7 +651,7 @@ const Admin = () => {
                   </div>
                   <div className="col-md-6">
                     <label className="bnc-label">Phiên bản</label>
-                    <input className="bnc-input" name="server_version" value={settingsForm.server_version} onChange={handleSettingsChange} placeholder="VD: 1.21.4" />
+                    <input className="bnc-input" name="server_version" value={settingsForm.server_version} onChange={handleSettingsChange} placeholder="VD: 26.2" />
                   </div>
                   <div className="col-md-6">
                     <label className="bnc-label">Email liên hệ</label>
