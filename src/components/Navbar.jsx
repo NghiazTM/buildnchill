@@ -9,6 +9,7 @@ import { formatVnd, mcHead } from '../lib/api';
 const NAV = [
   { to: '/', label: 'Trang chủ', end: true },
   { to: '/shop', label: 'Cửa hàng' },
+  { to: '/leaderboard', label: 'Xếp hạng' },
   { to: '/news', label: 'Tin tức' },
   { to: '/rules', label: 'Luật' },
   { to: '/faq', label: 'FAQ' },

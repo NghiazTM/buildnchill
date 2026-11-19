@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { mcHead } from '../lib/api';
 
 const PREVIEW = 12;
@@ -24,9 +25,11 @@ const OnlinePlayers = ({ names }) => {
       ) : (
         <ul className={`bnc-online-list ${open ? 'open' : ''}`}>
           {shown.map((n) => (
-            <li key={n} title={n}>
-              <img src={mcHead(n.replace(/^[.*]/, ''), 32)} alt="" loading="lazy" width="22" height="22" />
-              <span>{n}</span>
+            <li key={n} title={`Xem hồ sơ ${n}`}>
+              <Link to={`/player/${encodeURIComponent(n)}`}>
+                <img src={mcHead(n.replace(/^[.*]/, ''), 32)} alt="" loading="lazy" width="22" height="22" />
+                <span>{n}</span>
+              </Link>
             </li>
           ))}
           {more > 0 && (

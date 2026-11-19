@@ -45,6 +45,7 @@ const Footer = () => {
               <li><Link to="/">Trang chủ</Link></li>
               <li><Link to="/about">Giới thiệu</Link></li>
               <li><Link to="/news">Tin tức</Link></li>
+              <li><Link to="/leaderboard">Bảng xếp hạng</Link></li>
               <li><Link to="/rules">Luật máy chủ</Link></li>
               <li><Link to="/faq">Câu hỏi thường gặp</Link></li>
             </ul>

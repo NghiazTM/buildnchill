@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "@supabase/supabase-js": "^2.89.0",
     "framer-motion": "^10.16.16",
     "qrcode.react": "^4.2.0",
@@ -18,7 +19,8 @@
     "react-helmet-async": "^2.0.5",
     "react-icons": "^4.12.0",
     "react-quill": "^2.0.0",
-    "react-router-dom": "^6.20.0"
+    "react-router-dom": "^6.20.0",
+    "satori": "^0.12.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

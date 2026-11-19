@@ -156,7 +156,7 @@ const Home = () => {
                       {recent.slice(0, 5).map((r, i) => (
                         <li key={`${r.mc_username}-${i}`}>
                           <img src={mcHead(r.mc_username, 32)} alt="" loading="lazy" width="24" height="24" />
-                          <span className="who">{r.mc_username}</span>
+                          <Link to={`/player/${encodeURIComponent(r.mc_username)}`} className="who">{r.mc_username}</Link>
                           <span className="what">{r.product}</span>
                           <span className="when">{timeAgo(r.created_at)}</span>
                         </li>

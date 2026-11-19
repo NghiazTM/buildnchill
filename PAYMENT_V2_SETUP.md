@@ -87,6 +87,12 @@ give {username} diamond 64
 2. Trang chủ hiện avatar + tên người đang online (cập nhật realtime theo nhịp tim 10 giây).
 3. (Tuỳ chọn) Cài `MinecraftShopPlugin-2.2.0.jar` để ẩn người đang vanish (SuperVanish, PremiumVanish, EssentialsX). Plugin 2.1 vẫn chạy được nhưng sẽ hiện cả người đang vanish.
 
+## 8. Bảng xếp hạng, biểu đồ online, hồ sơ người chơi
+
+1. Chạy `PLAYTIME_MIGRATION.sql` trong Supabase → SQL Editor. Thời gian chơi bắt đầu được tính từ lúc này (không cần đổi plugin).
+2. Trang `/leaderboard`: top giờ chơi (hôm nay / tuần / tháng / mọi lúc), biểu đồ người online, giờ cao điểm.
+3. Trang `/player/<tên>`: hồ sơ công khai. Khi chia sẻ link, Facebook/Zalo/Discord hiện ảnh thẻ riêng (`/api/player-card/<tên>.png`, cập nhật mỗi ngày).
+
 ## Luồng hoạt động
 
 ```

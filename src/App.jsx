@@ -26,6 +26,8 @@ import './styles/sunstone.css';
 import './styles/pro.css';
 
 const Admin = lazy(() => import('./pages/Admin'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const Player = lazy(() => import('./pages/Player'));
 
 const Page = ({ children }) => (
   <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeOut' }}>
@@ -64,6 +66,8 @@ const AppContent = () => {
           <Route path="/news" element={<Page><News /></Page>} />
           <Route path="/news/:slug" element={<Page><NewsDetail /></Page>} />
           <Route path="/rules" element={<Page><Rules /></Page>} />
+          <Route path="/leaderboard" element={<Suspense fallback={loader}><Page><Leaderboard /></Page></Suspense>} />
+          <Route path="/player/:name" element={<Suspense fallback={loader}><Page><Player /></Page></Suspense>} />
           <Route path="/faq" element={<Page><Faq /></Page>} />
           <Route path="/contact" element={<Page><Contact /></Page>} />
           <Route path="/shop" element={<Page><Shop /></Page>} />

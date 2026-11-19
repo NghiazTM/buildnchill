@@ -5,11 +5,21 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  # Ảnh thẻ hồ sơ: thư viện vẽ ảnh (wasm) + font + ảnh nền
+  external_node_modules = ["satori", "@resvg/resvg-wasm"]
+  included_files = ["netlify/assets/**"]
 
 # API thân thiện: /api/<tên function>
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
+# Hồ sơ người chơi: kèm thẻ meta riêng để chia sẻ link có ảnh
+[[redirects]]
+  from = "/player/*"
+  to = "/.netlify/functions/player-page"
   status = 200
   force = true
 
