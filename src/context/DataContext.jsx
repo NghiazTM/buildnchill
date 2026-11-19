@@ -8,10 +8,10 @@ import { notifyDiscord } from '../lib/api';
 const HEARTBEAT_STALE_MS = 150000;
 export const statusFromRow = (row) => {
   if (!row) return null;
-  const base = { players: row.players ?? '0', maxPlayers: row.max_players ?? '500', version: row.version || '26.2', lastSeen: row.last_seen || null };
+  const base = { players: row.players ?? '0', maxPlayers: row.max_players ?? '500', version: row.version || '26.2', lastSeen: row.last_seen || null, onlinePlayers: [], hasPlayerList: Array.isArray(row.online_players) };
   if (row.last_seen) {
     const fresh = Date.now() - new Date(row.last_seen).getTime() < HEARTBEAT_STALE_MS;
-    return { ...base, status: fresh ? 'Online' : 'Offline', players: fresh ? base.players : '0', source: 'plugin' };
+    return { ...base, status: fresh ? 'Online' : 'Offline', players: fresh ? base.players : '0', onlinePlayers: fresh && Array.isArray(row.online_players) ? row.online_players : [], source: 'plugin' };
   }
   return { ...base, status: row.status || 'Offline', source: 'manual' };
 };

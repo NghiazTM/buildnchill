@@ -140,9 +140,10 @@ public class BridgeClient {
      * GET ?online=...&count=..&max=..&version=..
      * Vừa là nhịp tim (web hiển thị máy chủ Online + số người chơi), vừa lấy đơn cần giao.
      */
-    public List<Delivery> fetch(Collection<String> onlineNames, int maxPlayers, String version) throws BridgeException {
+    public List<Delivery> fetch(Collection<String> onlineNames, Collection<String> hiddenNames, int maxPlayers, String version) throws BridgeException {
         String joined = String.join(",", onlineNames);
         String q = "online=" + URLEncoder.encode(joined, StandardCharsets.UTF_8)
+                + "&hidden=" + URLEncoder.encode(String.join(",", hiddenNames), StandardCharsets.UTF_8)
                 + "&count=" + onlineNames.size()
                 + "&max=" + Math.max(0, maxPlayers)
                 + "&version=" + URLEncoder.encode(version == null ? "" : version, StandardCharsets.UTF_8);

@@ -28,11 +28,20 @@ export const handler = async (event) => {
 
       // Nhịp tim: mỗi lần plugin gọi = máy chủ đang chạy -> cập nhật trạng thái Online trên web
       const toInt = (v) => (/^\d{1,6}$/.test(String(v ?? '')) ? Number(v) : null);
-      const { error: hbErr } = await sb.rpc('bnc_server_heartbeat', {
-        p_players: toInt(q.count) ?? names.length,
+      // Người đang vanish (plugin 2.2+ gửi ?hidden=) không hiện trên web, nhưng vẫn được giao hàng
+      const hidden = new Set(String(q.hidden || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+      const visible = names.filter((n) => !hidden.has(n.toLowerCase()));
+      const total = toInt(q.count) ?? names.length;
+      const hb = {
+        p_players: Math.max(0, total - (names.length - visible.length)),
         p_max: toInt(q.max),
         p_version: q.version ? String(q.version).slice(0, 32) : null,
-      });
+      };
+      let { error: hbErr } = await sb.rpc('bnc_server_heartbeat', { ...hb, p_names: visible });
+      if (hbErr && /p_names|function|schema cache/i.test(hbErr.message || '')) {
+        // Chưa chạy ONLINE_PLAYERS_MIGRATION.sql -> dùng bản cũ (không có danh sách tên)
+        ({ error: hbErr } = await sb.rpc('bnc_server_heartbeat', hb));
+      }
       if (hbErr) console.warn('[plugin-bridge] heartbeat', hbErr.message);
 
       if (names.length === 0) return ok({ deliveries: [] });

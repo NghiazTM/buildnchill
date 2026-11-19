@@ -121,6 +121,18 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, this::pollCycle, Math.max(1L, delayTicks));
     }
 
+    /** SuperVanish / PremiumVanish / EssentialsX / VanishNoPacket đều gắn metadata "vanished". */
+    private static boolean isVanished(Player p) {
+        try {
+            for (org.bukkit.metadata.MetadataValue v : p.getMetadata("vanished")) {
+                if (v.asBoolean()) return true;
+            }
+        } catch (Exception ignored) {
+            // plugin vanish lạ -> coi như không vanish
+        }
+        return false;
+    }
+
     private void pollCycle() {
         if (client == null || !polling.compareAndSet(false, true)) return;
         BridgeClient bridge = client;
@@ -128,9 +140,13 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
             lastPollAt = System.currentTimeMillis();
 
             // 1. Snapshot người chơi online trên main thread
+            List<String> hidden = new ArrayList<>();
             List<String> online = Bukkit.getScheduler().callSyncMethod(this, () -> {
                 List<String> names = new ArrayList<>();
-                for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    names.add(p.getName());
+                    if (isVanished(p)) hidden.add(p.getName());
+                }
                 return names;
             }).get(10, TimeUnit.SECONDS);
 
@@ -138,7 +154,7 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
 
             // 2. Nhịp tim + lấy đơn cần giao (luôn gọi, kể cả khi không ai online, để web biết máy chủ đang chạy)
             String mcVersion = Bukkit.getBukkitVersion().split("-")[0];
-            List<BridgeClient.Delivery> deliveries = bridge.fetch(online, Bukkit.getMaxPlayers(), mcVersion);
+            List<BridgeClient.Delivery> deliveries = bridge.fetch(online, hidden, Bukkit.getMaxPlayers(), mcVersion);
             if (!online.isEmpty()) {
                 List<BridgeClient.Delivery> toRun = new ArrayList<>();
 

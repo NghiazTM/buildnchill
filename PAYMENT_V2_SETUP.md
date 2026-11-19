@@ -81,6 +81,12 @@ give {username} diamond 64
    - Chưa thêm tài khoản nào → dùng tài khoản trong biến `BANK_*` / `VITE_BANK_*`.
    - **Mỗi tài khoản phải được liên kết trong SePay** (cùng webhook) thì chuyển khoản mới tự xác nhận. Webhook nhận diện theo nội dung `BNCxxxxxx` / `NAP <tên>`, không phụ thuộc số tài khoản.
 
+## 7. Danh sách người chơi online (v2.2)
+
+1. Chạy `ONLINE_PLAYERS_MIGRATION.sql` trong Supabase → SQL Editor.
+2. Trang chủ hiện avatar + tên người đang online (cập nhật realtime theo nhịp tim 10 giây).
+3. (Tuỳ chọn) Cài `MinecraftShopPlugin-2.2.0.jar` để ẩn người đang vanish (SuperVanish, PremiumVanish, EssentialsX). Plugin 2.1 vẫn chạy được nhưng sẽ hiện cả người đang vanish.
+
 ## Luồng hoạt động
 
 ```

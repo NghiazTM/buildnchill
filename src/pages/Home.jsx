@@ -10,6 +10,7 @@ import { supabase } from '../supabaseClient';
 import { Seo, useCopy } from '../components/ui';
 import { formatVnd, mcHead, plainText } from '../lib/api';
 import { FEATURES, HOW_TO_JOIN } from '../data/siteContent';
+import OnlinePlayers from '../components/OnlinePlayers';
 
 const ICONS = { BiRocket, BiGroup, BiBuildings, BiShieldQuarter };
 
@@ -140,6 +141,8 @@ const Home = () => {
                     <span className="v">VietQR · Ví</span>
                   </div>
                 </div>
+
+                {online && serverStatus?.hasPlayerList && <OnlinePlayers names={serverStatus.onlinePlayers || []} />}
 
                 <div className="bnc-console-feed">
                   <div className="feed-head">
