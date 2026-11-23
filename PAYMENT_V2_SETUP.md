@@ -95,11 +95,11 @@ give {username} diamond 64
 
 ## 9. Thống kê & thành tựu lấy thẳng từ game (plugin 2.3)
 
-1. Chạy  trong Supabase SQL Editor (sau ).
-2. Thay plugin bằng  rồi restart máy chủ. Giữ nguyên  cũ; mục  mới tự dùng giá trị mặc định.
-3. Lần khởi động đầu, plugin tự đọc  và  để nhập lịch sử của **mọi** người chơi cũ. Muốn nhập lại: .
-4. Người đang online được gửi số liệu mỗi 60 giây () và khi thoát game.
-5. Số liệu riêng của server (Money, Token, Coins…) lấy qua PlaceholderAPI trong  — mỗi mục tự thành một bảng xếp hạng trên web.
+1. Chạy `GAME_STATS_MIGRATION.sql` trong Supabase SQL Editor (sau `PLAYTIME_MIGRATION.sql`).
+2. Thay plugin bằng `MinecraftShopPlugin-2.3.0.jar` rồi restart máy chủ. Giữ nguyên `config.yml` cũ; mục `stats:` mới tự dùng giá trị mặc định.
+3. Lần khởi động đầu, plugin tự đọc `world/stats` và `world/advancements` để nhập lịch sử của **mọi** người chơi cũ. Muốn nhập lại: `/bncshop syncstats`.
+4. Người đang online được gửi số liệu mỗi 60 giây (`stats.interval_seconds`) và khi thoát game.
+5. Số liệu riêng của server (Money, Token, Coins…) lấy qua PlaceholderAPI trong `stats.placeholders` — mỗi mục tự thành một bảng xếp hạng trên web.
 
 ## Luồng hoạt động
 
