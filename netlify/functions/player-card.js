@@ -16,15 +16,17 @@ export const handler = async (event) => {
 
   try {
     const sb = getAdmin();
-    const [{ data: profile, error }, { data: settings }] = await Promise.all([
+    const [{ data: profile, error }, { data: settings }, clanRes] = await Promise.all([
       sb.rpc('bnc_player_profile', { p_name: name }),
       sb.from('site_settings').select('server_ip').eq('id', 1).maybeSingle(),
+      sb.rpc('bnc_player_clan', { p_name: name }).then((r) => r, () => ({ data: null })),
     ]);
     if (error || !profile) return fallback();
 
     const png = await renderPlayerCard(profile, {
       serverIp: settings?.server_ip || 'buildnchill.id.vn',
       site: new URL(siteUrl()).host,
+      clan: clanRes?.data || null,
     });
     return {
       statusCode: 200,

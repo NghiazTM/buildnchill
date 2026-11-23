@@ -2,12 +2,16 @@
 // satori: HTML/CSS -> SVG ; resvg-wasm: SVG -> PNG. Không dùng module native.
 import fs from 'node:fs';
 import path from 'node:path';
-import satori from 'satori';
+import * as satoriModule from 'satori';
+import { MILESTONES, milestoneProgress } from '../../src/lib/gameStats.js';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
 
 const W = 1200;
 const H = 630;
 const GOLD = '#d4af37';
+
+// Khi Netlify đóng gói thành CommonJS, satori nằm ở .default.default — lấy đúng hàm cho cả hai kiểu.
+const satori = [satoriModule.default, satoriModule.default?.default, satoriModule].find((f) => typeof f === 'function');
 
 // ---------- Tìm file đi kèm function (local / Netlify Lambda) ----------
 const roots = () => [process.cwd(), process.env.LAMBDA_TASK_ROOT, '/var/task', path.resolve('.')].filter(Boolean);
@@ -77,6 +81,19 @@ export const hoursText = (sec) => {
   return `${Math.floor(s / 3600).toLocaleString('vi-VN')} giờ`;
 };
 
+/** Danh hiệu cao nhất đạt được, ví dụ "Thợ mỏ Kim cương" (ưu tiên bậc cao, rồi theo thứ tự danh sách) */
+export const topMilestone = (game) => {
+  if (!game) return null;
+  let best = null;
+  for (const m of MILESTONES) {
+    const { level, tier } = milestoneProgress(m, game);
+    if (level >= 2 && (!best || level > best.level)) best = { level, label: `${m.name} ${tier}` };
+  }
+  return best?.label || null;
+};
+
+const SAFE_COLOR = /^#[0-9a-f]{6}$/i;
+
 const badgesFor = (p) => {
   const b = [];
   if (p.rank_all === 1) b.push('Số 1 giờ chơi');
@@ -84,6 +101,8 @@ const badgesFor = (p) => {
   else if (p.rank_all && p.rank_all <= 10) b.push('Top 10 giờ chơi');
   if (p.rank_week === 1) b.push('Quán quân tuần');
   if (p.donate_rank && p.donate_rank <= 10) b.push('Nhà tài trợ');
+  const top = topMilestone(p.game);
+  if (top) b.push(top);
   if (p.total_seconds >= 100 * 3600) b.push('Lão làng 100 giờ');
   return b.slice(0, 3);
 };
@@ -99,48 +118,65 @@ const skinData = async (name) => {
   return null;
 };
 
-const stat = (label, value, sub) =>
-  h('div', { display: 'flex', flexDirection: 'column', padding: '18px 26px', borderRadius: 16, backgroundColor: 'rgba(17,17,19,0.78)', border: '1px solid rgba(255,255,255,0.10)', marginRight: 16, minWidth: 190 },
-    h('div', { fontSize: 20, color: '#a8a29e', fontWeight: 400 }, label),
-    h('div', { fontSize: 40, fontWeight: 700, color: '#f5f5f4', marginTop: 4 }, value),
-    sub ? h('div', { fontSize: 18, color: '#78716c', marginTop: 2 }, sub) : null);
+const stat = (label, value, sub, compact) =>
+  h('div', { display: 'flex', flexDirection: 'column', padding: compact ? '16px 22px' : '18px 26px', borderRadius: 16, backgroundColor: 'rgba(17,17,19,0.80)', border: '1px solid rgba(255,255,255,0.10)', marginRight: 14, minWidth: compact ? 168 : 200 },
+    h('div', { fontSize: compact ? 19 : 20, color: '#a8a29e', fontWeight: 400 }, label),
+    h('div', { fontSize: compact ? 34 : 40, fontWeight: 700, color: '#f5f5f4', marginTop: 4 }, value),
+    sub ? h('div', { fontSize: 17, color: '#78716c', marginTop: 2 }, sub) : null);
 
 /**
  * profile: kết quả RPC bnc_player_profile
- * opts: { serverIp, site }
+ * opts: { serverIp, site, clan: { name, tag, color } | null }
  */
-export const renderPlayerCard = async (profile, { serverIp = 'buildnchill.id.vn', site = 'buildnchill.id.vn' } = {}) => {
+export const renderPlayerCard = async (profile, { serverIp = 'buildnchill.id.vn', site = 'buildnchill.id.vn', clan = null } = {}) => {
   const { fonts, bg, logo } = await init();
   const name = String(profile.mc_username || 'Player');
   const skin = await skinData(name);
   const badges = badgesFor(profile);
   const nameSize = name.length > 13 ? 76 : name.length > 10 ? 88 : 100;
+  const g = profile.game && Number(profile.game.play_seconds || profile.game.adv_done || profile.game.blocks_mined) > 0 ? profile.game : null;
+  if (!clan?.tag || !clan?.name) clan = null;
+  const clanColor = clan && SAFE_COLOR.test(clan.color || '') ? clan.color : GOLD;
+  const num = (v) => Math.round(Number(v) || 0).toLocaleString('vi-VN');
+
+  const stats = [
+    stat('Tổng giờ chơi', hoursText(profile.total_seconds), null, !!g),
+    stat('Hạng giờ chơi', profile.rank_all ? `#${profile.rank_all}` : '—', profile.rank_all && profile.players_tracked ? `trên ${profile.players_tracked} người` : null, !!g),
+    g ? stat('Thành tựu', num(g.adv_done), g.adv_total ? `trên ${g.adv_total}` : null, true) : stat('Tuần này', hoursText(profile.week_seconds)),
+    g ? (Number(g.blocks_mined) > 0 ? stat('Khối đã đào', num(g.blocks_mined), null, true) : stat('Tuần này', hoursText(profile.week_seconds), null, true)) : null,
+  ];
 
   const tree = h('div', { width: W, height: H, display: 'flex', position: 'relative', backgroundColor: '#09090b', fontFamily: 'BVP', color: '#f5f5f4' },
     bg ? img(bg, { position: 'absolute', left: 0, top: 0, width: W, height: H }) : null,
-    h('div', { position: 'absolute', left: 0, top: 0, width: W, height: H, display: 'flex', backgroundImage: 'linear-gradient(90deg, rgba(9,9,11,0.96) 0%, rgba(9,9,11,0.82) 55%, rgba(9,9,11,0.35) 100%)' }),
+    h('div', { position: 'absolute', left: 0, top: 0, width: W, height: H, display: 'flex', backgroundImage: 'linear-gradient(90deg, rgba(9,9,11,0.97) 0%, rgba(9,9,11,0.86) 55%, rgba(9,9,11,0.45) 100%)' }),
+    // Quầng sáng sau nhân vật + bóng dưới chân
+    h('div', { position: 'absolute', left: 724, top: 0, width: 476, height: H, display: 'flex', backgroundImage: 'radial-gradient(circle at 59% 52%, rgba(240,200,80,0.85) 0%, rgba(212,175,55,0.42) 30%, rgba(212,175,55,0.12) 50%, rgba(212,175,55,0) 64%)' }),
+    h('div', { position: 'absolute', right: 96, bottom: 22, width: 200, height: 34, display: 'flex', borderRadius: 999, backgroundImage: 'radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 70%)' }),
     h('div', { position: 'absolute', left: 0, top: 0, width: W, height: 6, display: 'flex', backgroundColor: GOLD }),
 
     // Cột chữ
-    h('div', { position: 'absolute', left: 72, top: 64, width: 820, display: 'flex', flexDirection: 'column' },
+    h('div', { position: 'absolute', left: 72, top: 56, bottom: 104, width: 840, display: 'flex', flexDirection: 'column' },
       h('div', { display: 'flex', alignItems: 'center' },
         logo ? img(logo, { width: 52, height: 52, borderRadius: 12, marginRight: 16 }) : null,
         h('div', { fontSize: 28, fontWeight: 700 }, 'BuildnChill'),
         h('div', { fontSize: 24, color: '#78716c', marginLeft: 14 }, '· Hồ sơ người chơi')),
-      h('div', { fontSize: nameSize, fontWeight: 700, letterSpacing: -2, marginTop: 34, lineHeight: 1.05 }, name),
+      // Phần chính: căn giữa theo chiều dọc giữa logo và chân thẻ
+      h('div', { display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'center' },
+      h('div', { fontSize: nameSize, fontWeight: 700, letterSpacing: -2, lineHeight: 1.05 }, name),
+      clan
+        ? h('div', { display: 'flex', alignItems: 'center', marginTop: 10, fontSize: 28 },
+          h('div', { fontWeight: 700, color: clanColor, marginRight: 12 }, `[${clan.tag}]`),
+          h('div', { color: '#d6d3d1', fontWeight: 600 }, clan.name),
+          clan.role === 'owner' ? h('div', { color: '#78716c', marginLeft: 12, fontSize: 22 }, '· Chủ clan') : null)
+        : null,
       badges.length
-        ? h('div', { display: 'flex', marginTop: 22 },
+        ? h('div', { display: 'flex', marginTop: clan ? 20 : 24 },
           badges.map((b) => h('div', { fontSize: 22, fontWeight: 600, color: GOLD, padding: '8px 18px', borderRadius: 999, border: '1.5px solid rgba(212,175,55,0.55)', backgroundColor: 'rgba(212,175,55,0.10)', marginRight: 12 }, b)))
         : null,
-      h('div', { display: 'flex', marginTop: badges.length ? 34 : 44 },
-        stat('Tổng giờ chơi', hoursText(profile.total_seconds)),
-        stat('Hạng giờ chơi', profile.rank_all ? `#${profile.rank_all}` : '—', profile.rank_all && profile.players_tracked ? `trên ${profile.players_tracked} người` : null),
-        profile.game && Number(profile.game.adv_done) > 0
-          ? stat('Thành tựu', Number(profile.game.adv_done).toLocaleString('vi-VN'), profile.game.adv_total ? `trên ${profile.game.adv_total}` : null)
-          : stat('Tuần này', hoursText(profile.week_seconds)))),
+      h('div', { display: 'flex', marginTop: badges.length ? (clan ? 26 : 32) : 36 }, stats))),
 
     // Chân thẻ
-    h('div', { position: 'absolute', left: 72, bottom: 52, display: 'flex', alignItems: 'center', fontSize: 24 },
+    h('div', { position: 'absolute', left: 72, bottom: 46, display: 'flex', alignItems: 'center', fontSize: 24 },
       h('div', { color: '#a8a29e' }, 'Vào chơi:'),
       h('div', { color: GOLD, fontWeight: 600, marginLeft: 10 }, serverIp),
       h('div', { color: '#57534e', marginLeft: 18, marginRight: 18 }, '•'),

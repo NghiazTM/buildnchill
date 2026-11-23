@@ -1,5 +1,5 @@
 // Chỉ số lấy thẳng từ trong game (plugin 2.3+): định dạng, mục xếp hạng, danh hiệu.
-import { formatDuration } from './playtime';
+import { formatDuration } from './playtime.js';
 
 const n = (v) => Math.round(Number(v) || 0).toLocaleString('vi-VN');
 const compact = (v) => {

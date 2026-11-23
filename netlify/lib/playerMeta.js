@@ -1,6 +1,6 @@
 // Gắn thẻ meta riêng (tiêu đề, mô tả, ảnh) cho trang /player/<tên> để
 // Facebook / Zalo / Discord hiện thẻ xem trước của đúng người chơi.
-import { hoursText } from './playerCard.js';
+import { hoursText, topMilestone } from './playerCard.js';
 
 export const PLAYER_NAME_RE = /^[.*]?[A-Za-z0-9_]{2,16}$/;
 
@@ -11,22 +11,32 @@ const setMeta = (html, key, value) => {
   return re.test(html) ? html.replace(re, `$1${esc(value)}$2`) : html;
 };
 
-export const playerDescription = (p) => {
+const num = (v) => Math.round(Number(v) || 0).toLocaleString('vi-VN');
+
+export const playerDescription = (p, clan) => {
   if (!p) return null;
-  const parts = [`${p.mc_username} đã chơi ${hoursText(p.total_seconds)} trên BuildnChill`];
-  if (p.rank_all) parts[0] += ` — hạng #${p.rank_all} thời gian chơi`;
-  if (p.game && Number(p.game.adv_done) > 0) parts.push(`Đã mở khoá ${p.game.adv_done} thành tựu.`);
-  if (p.week_seconds > 0) parts.push(`Tuần này: ${hoursText(p.week_seconds)}.`);
-  parts.push('Xem hồ sơ và bảng xếp hạng máy chủ Minecraft sinh tồn Việt Nam.');
-  return `${parts[0]}. ${parts.slice(1).join(' ')}`;
+  const facts = [`⏱ ${hoursText(p.total_seconds)} chơi`];
+  if (p.rank_all) facts.push(`🥇 Hạng #${p.rank_all}${p.players_tracked ? `/${p.players_tracked}` : ''}`);
+  const g = p.game;
+  if (g && Number(g.adv_done) > 0) facts.push(`🏆 ${num(g.adv_done)}${g.adv_total ? `/${g.adv_total}` : ''} thành tựu`);
+  if (g && Number(g.blocks_mined) > 0) facts.push(`⛏ ${num(g.blocks_mined)} khối`);
+  const top = topMilestone(g);
+  const extra = [];
+  if (clan?.name) extra.push(`Clan [${clan.tag}] ${clan.name}.`);
+  if (top) extra.push(`Danh hiệu: ${top}.`);
+  return `${facts.join(' · ')}. ${extra.join(' ')}${extra.length ? ' ' : ''}Xem hồ sơ đầy đủ trên BuildnChill — máy chủ Minecraft sinh tồn Việt Nam.`;
 };
 
-export const injectPlayerMeta = (html, { name, profile, site, version }) => {
+const insertHead = (html, tags) => html.replace(/<\/head>/i, `${tags}
+  </head>`);
+
+export const injectPlayerMeta = (html, { name, profile, clan, site, version }) => {
   const display = profile?.mc_username || name;
   const url = `${site}/player/${encodeURIComponent(display)}`;
-  const title = `${display} — Hồ sơ người chơi | BuildnChill`;
-  const desc = playerDescription(profile) || `Hồ sơ người chơi ${display} trên máy chủ Minecraft BuildnChill.`;
-  const image = profile ? `${site}/api/player-card/${encodeURIComponent(display)}.png?v=${version}` : null;
+  const title = `${display}${clan?.tag ? ` [${clan.tag}]` : ''} — Hồ sơ người chơi | BuildnChill`;
+  const desc = playerDescription(profile, clan) || `Hồ sơ người chơi ${display} trên máy chủ Minecraft BuildnChill.`;
+  // "c2" = phiên bản thiết kế thẻ: đổi khi sửa ảnh để Discord/Facebook/Zalo tải lại ảnh mới
+  const image = profile ? `${site}/api/player-card/${encodeURIComponent(display)}.png?v=c2-${version}` : null;
 
   let out = html.replace(/<title>[^<]*<\/title>/i, `<title>${esc(title)}</title>`);
   out = out.replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/i, `$1${esc(url)}$2`);
@@ -37,6 +47,7 @@ export const injectPlayerMeta = (html, { name, profile, site, version }) => {
   out = setMeta(out, 'og:description', desc);
   out = setMeta(out, 'twitter:title', title);
   out = setMeta(out, 'twitter:description', desc);
+  out = insertHead(out, `  <meta property="profile:username" content="${esc(display)}" />`);
   if (image) {
     const alt = `Thẻ hồ sơ ${display} — BuildnChill`;
     out = setMeta(out, 'og:image', image);

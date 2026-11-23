@@ -28,17 +28,23 @@ export const handler = async (event) => {
   }
 
   let profile = null;
+  let clan = null;
   if (PLAYER_NAME_RE.test(name)) {
     try {
-      const { data } = await getAdmin().rpc('bnc_player_profile', { p_name: name });
-      profile = data || null;
+      const sb = getAdmin();
+      const [p, c] = await Promise.all([
+        sb.rpc('bnc_player_profile', { p_name: name }),
+        sb.rpc('bnc_player_clan', { p_name: name }).then((r) => r, () => ({ data: null })),
+      ]);
+      profile = p.data || null;
+      clan = c?.data || null;
     } catch (e) {
       console.warn('[player-page] profile', e.message);
     }
   }
 
   const body = PLAYER_NAME_RE.test(name)
-    ? injectPlayerMeta(html, { name, profile, site: siteUrl(), version: vnDate() })
+    ? injectPlayerMeta(html, { name, profile, clan, site: siteUrl(), version: vnDate() })
     : html;
 
   return {
