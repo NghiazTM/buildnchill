@@ -13,13 +13,14 @@ import CarouselManagement from '../components/CarouselManagement';
 import WalletManagement from '../components/WalletManagement';
 import RechargeManagement from '../components/RechargeManagement';
 import PaymentAccountsManagement from '../components/PaymentAccountsManagement';
+import CommunityManagement from '../components/CommunityManagement';
 import { Seo, StatusBadge, useToast } from '../components/ui';
 import { ORDER_STATUS, formatVnd, mcHead } from '../lib/api';
 import '../styles/admin.css';
 import {
   BiBarChart, BiNews, BiServer, BiCog, BiPlus, BiTrash, BiLogOutCircle, BiCheckCircle, BiEnvelope,
   BiCheck, BiImage, BiShoppingBag, BiUser, BiShow, BiWallet, BiCreditCard, BiRefresh, BiX,
-  BiCategory, BiPackage, BiErrorCircle, BiTime, BiEdit, BiBuildingHouse,
+  BiCategory, BiPackage, BiErrorCircle, BiTime, BiEdit, BiBuildingHouse, BiCalendarEvent,
 } from 'react-icons/bi';
 
 const CONTACT_STATUS = {
@@ -309,6 +310,7 @@ const Admin = () => {
       tabs: [
         { id: 'news', label: 'Tin tức', icon: BiNews },
         { id: 'carousel', label: 'Ảnh trình chiếu', icon: BiImage },
+        { id: 'community', label: 'Cộng đồng', icon: BiCalendarEvent },
         { id: 'contacts', label: 'Liên hệ', icon: BiEnvelope, count: unreadContacts },
       ],
     },
@@ -505,6 +507,7 @@ const Admin = () => {
           {activeTab === 'wallets' && <WalletManagement />}
           {activeTab === 'banks' && <PaymentAccountsManagement />}
           {activeTab === 'carousel' && <CarouselManagement />}
+          {activeTab === 'community' && <CommunityManagement />}
 
           {activeTab === 'news' && (
             <div>

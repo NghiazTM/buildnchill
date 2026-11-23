@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BiArrowBack, BiLink, BiTime, BiCalendar, BiLogIn, BiTrophy, BiShoppingBag, BiJoystick, BiMedal } from 'react-icons/bi';
+import { BiArrowBack, BiLink, BiTime, BiCalendar, BiLogIn, BiTrophy, BiShoppingBag, BiJoystick, BiMedal, BiTransfer, BiImages } from 'react-icons/bi';
 import { supabase } from '../supabaseClient';
 import { useData } from '../context/DataContext';
 import { Seo, Spinner, useCopy } from '../components/ui';
 import { BarChart } from '../components/charts';
 import PlayerSearch from '../components/PlayerSearch';
+import SkinViewer3D from '../components/SkinViewer3D';
+import ActivityCalendar from '../components/ActivityCalendar';
+import { ClanTag } from './Clans';
 import { formatDuration, formatDate, timeAgo, isMcName } from '../lib/playtime';
 import { MILESTONES, TIERS, milestoneProgress, fmtNum, km } from '../lib/gameStats';
 import '../styles/pages.css';
@@ -27,6 +30,7 @@ const badgesFor = (p) => {
   return b;
 };
 
+const smallScreen = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 575px)').matches;
 const FRAME = { task: 'Thành tựu', goal: 'Mục tiêu', challenge: 'Thử thách' };
 
 const GameStats = ({ g, ranks = {} }) => {
@@ -138,6 +142,8 @@ const Player = () => {
   const { serverStatus } = useData();
   const copy = useCopy();
   const [p, setP] = useState(undefined);
+  const [clan, setClan] = useState(null);
+  const [cal, setCal] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -146,6 +152,8 @@ const Player = () => {
     supabase.rpc('bnc_player_profile', { p_name: name }).then(({ data, error }) => {
       if (alive) setP(error ? null : data || null);
     });
+    supabase.rpc('bnc_player_clan', { p_name: name }).then(({ data }) => { if (alive) setClan(data || null); });
+    supabase.rpc('bnc_player_calendar', { p_name: name }).then(({ data, error }) => { if (alive) setCal(error ? null : data || []); });
     return () => { alive = false; };
   }, [name]);
 
@@ -203,10 +211,11 @@ const Player = () => {
             <Link to="/">Trang chủ</Link> / <Link to="/leaderboard">Bảng xếp hạng</Link> / <span className="text-soft">{display}</span>
           </div>
           <div className="bnc-player-top">
-            <img className="skin" src={skin(display)} alt={`Skin của ${display}`} width="120" height="240" />
+            <SkinViewer3D name={display} width={smallScreen ? 96 : 150} height={smallScreen ? 180 : 280} alt={`Skin của ${display}`} />
             <div className="min-w-0 flex-grow-1">
               <div className={`bnc-live ${online ? 'on' : 'off'} mb-2`}>{online ? 'Đang online' : p.last_seen ? `Online ${timeAgo(p.last_seen)}` : 'Offline'}</div>
               <h1 className="mb-2 text-break">{display}</h1>
+              {clan && <Link to={`/clans/${clan.tag}`} className="bnc-player-clan"><ClanTag tag={clan.tag} color={clan.color} small /> {clan.name}</Link>}
               {badges.length > 0 && (
                 <div className="bnc-badges">{badges.map((b) => <span key={b.t} className={`bnc-badge ${b.cls}`}>{b.t}</span>)}</div>
               )}
@@ -214,6 +223,8 @@ const Player = () => {
                 <button type="button" className="bnc-btn bnc-btn-sm bnc-btn-ghost" onClick={() => copy(window.location.href, 'Đã sao chép link hồ sơ')}>
                   <BiLink /> Chia sẻ hồ sơ
                 </button>
+                <Link to={`/compare/${encodeURIComponent(display)}`} className="bnc-btn bnc-btn-sm bnc-btn-ghost"><BiTransfer /> So sánh</Link>
+                <Link to={`/builds?by=${encodeURIComponent(display)}`} className="bnc-btn bnc-btn-sm bnc-btn-ghost"><BiImages /> Công trình</Link>
                 <Link to="/leaderboard" className="bnc-btn bnc-btn-sm bnc-btn-ghost"><BiTrophy /> Bảng xếp hạng</Link>
               </div>
             </div>
@@ -272,6 +283,12 @@ const Player = () => {
               </div>
             </div>
           </div>
+          {cal && (
+            <div className="bnc-card bnc-card-pad mt-4">
+              <h2 className="h6 mb-1"><BiCalendar className="text-accent me-2" />Lịch hoạt động</h2>
+              <ActivityCalendar days={cal} name={display} />
+            </div>
+          )}
         </div>
       </section>
     </>

@@ -30,4 +30,46 @@
     <priority>0.5</priority>
     <changefreq>monthly</changefreq>
   </url>
+  <url>
+    <loc>https://buildnchill.id.vn/stats</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/builds</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/events</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/clans</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/compare</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/map</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://buildnchill.id.vn/vote</loc>
+    <lastmod>2026-11-23</lastmod>
+    <priority>0.6</priority>
+    <changefreq>daily</changefreq>
+  </url>
 </urlset>

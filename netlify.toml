@@ -9,6 +9,10 @@
   external_node_modules = ["satori", "@resvg/resvg-wasm"]
   included_files = ["netlify/assets/**"]
 
+# Nhắc sự kiện sắp diễn ra (thông báo trình duyệt) — mỗi 10 phút
+[functions."event-reminders"]
+  schedule = "*/10 * * * *"
+
 # API thân thiện: /api/<tên function>
 [[redirects]]
   from = "/api/*"
@@ -39,6 +43,11 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/site.webmanifest"

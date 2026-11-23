@@ -22,7 +22,7 @@ const Footer = () => {
     <footer className="bnc-footer">
       <div className="container">
         <div className="row g-4">
-          <div className="col-lg-4 col-md-6">
+          <div className="col-lg-3 col-md-12">
             <Link to="/" className="bnc-brand mb-3">
               <img src="/img/logo.png" alt="" width="48" height="48" />
               <span>{title}</span>
@@ -39,19 +39,30 @@ const Footer = () => {
             </div>
           </div>
 
-          <div className="col-lg-2 col-md-3 col-6">
+          <div className="col-lg-2 col-md-4 col-6">
             <h4>Khám phá</h4>
             <ul>
               <li><Link to="/">Trang chủ</Link></li>
               <li><Link to="/about">Giới thiệu</Link></li>
               <li><Link to="/news">Tin tức</Link></li>
-              <li><Link to="/leaderboard">Bảng xếp hạng</Link></li>
               <li><Link to="/rules">Luật máy chủ</Link></li>
               <li><Link to="/faq">Câu hỏi thường gặp</Link></li>
             </ul>
           </div>
 
-          <div className="col-lg-2 col-md-3 col-6">
+          <div className="col-lg-2 col-md-4 col-6">
+            <h4>Cộng đồng</h4>
+            <ul>
+              <li><Link to="/leaderboard">Bảng xếp hạng</Link></li>
+              <li><Link to="/stats">Thống kê server</Link></li>
+              <li><Link to="/builds">Công trình</Link></li>
+              <li><Link to="/events">Sự kiện</Link></li>
+              <li><Link to="/clans">Clan</Link></li>
+              <li><Link to="/vote">Bình chọn</Link></li>
+            </ul>
+          </div>
+
+          <div className="col-lg-2 col-md-4 col-6">
             <h4>Cửa hàng</h4>
             <ul>
               <li><Link to="/shop">Mua vật phẩm</Link></li>
@@ -61,7 +72,7 @@ const Footer = () => {
             </ul>
           </div>
 
-          <div className="col-lg-4 col-md-6">
+          <div className="col-lg-3 col-md-12">
             <h4>Máy chủ</h4>
             <div className="bnc-card-flat p-3">
               <div className="d-flex align-items-center justify-content-between mb-2">
@@ -71,8 +82,8 @@ const Footer = () => {
                   {online ? `Online • ${serverStatus?.players || 0} người chơi` : 'Offline'}
                 </span>
               </div>
-              <div className="d-flex align-items-center justify-content-between gap-2">
-                <code className="text-accent fw-bold fs-6 text-truncate">{ip}</code>
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <code className="text-accent fw-bold fs-6 text-break">{ip}</code>
                 <button className="bnc-btn bnc-btn-sm" onClick={() => copy(ip, 'Đã sao chép IP máy chủ')}>
                   <BiCopy /> Copy IP
                 </button>

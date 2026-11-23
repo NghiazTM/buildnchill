@@ -6,9 +6,9 @@ import { mcHead } from '../lib/api';
 import { isMcName } from '../lib/playtime';
 
 /** Ô tìm người chơi — gợi ý khi gõ, Enter để mở hồ sơ. */
-const PlayerSearch = ({ className = '' }) => {
+const PlayerSearch = ({ className = '', onPick, placeholder = 'Tìm người chơi theo tên…', buttonLabel = 'Xem', label = 'Tìm người chơi', initial = '' }) => {
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initial);
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
@@ -27,6 +27,7 @@ const PlayerSearch = ({ className = '' }) => {
   const go = (name) => {
     if (!isMcName(name)) return;
     setOpen(false);
+    if (onPick) { setQ(name); onPick(name); return; }
     setQ('');
     navigate(`/player/${encodeURIComponent(name)}`);
   };
@@ -39,13 +40,13 @@ const PlayerSearch = ({ className = '' }) => {
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Tìm người chơi theo tên…"
-        aria-label="Tìm người chơi"
+        placeholder={placeholder}
+        aria-label={label}
         maxLength={17}
         autoComplete="off"
         spellCheck="false"
       />
-      <button type="submit" className="bnc-btn bnc-btn-sm" disabled={!isMcName(q.trim())}>Xem</button>
+      <button type="submit" className="bnc-btn bnc-btn-sm" disabled={!isMcName(q.trim())}>{buttonLabel}</button>
       {open && items.length > 0 && (
         <ul className="bnc-player-suggest" role="listbox">
           {items.map((it) => (

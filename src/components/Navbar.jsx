@@ -5,11 +5,43 @@ import { BiMenu, BiX, BiUser, BiPlusCircle, BiShield, BiLogOut, BiChevronDown, B
 import { FaDiscord } from 'react-icons/fa';
 import { useData } from '../context/DataContext';
 import { formatVnd, mcHead } from '../lib/api';
+import { COMMUNITY_LINKS } from '../lib/community';
+
+// Menu thả xuống (máy tính) / danh sách mở rộng (điện thoại)
+const NavGroup = ({ item, pathname }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const active = item.children.some((c) => pathname === c.to || pathname.startsWith(`${c.to}/`) || (c.to === '/leaderboard' && pathname.startsWith('/player/')));
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <li className={`bnc-nav-group ${open ? 'open' : ''}`} ref={ref}>
+      <button type="button" className={`bnc-nav-link ${active ? 'active' : ''}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {item.label} <BiChevronDown className="chev" aria-hidden="true" />
+      </button>
+      <div className="bnc-nav-drop">
+        {item.children.map((c) => (
+          <NavLink key={c.to} to={c.to} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <span className="t">{c.label}</span>
+            <span className="d">{c.desc}</span>
+          </NavLink>
+        ))}
+      </div>
+    </li>
+  );
+};
 
 const NAV = [
   { to: '/', label: 'Trang chủ', end: true },
   { to: '/shop', label: 'Cửa hàng' },
-  { to: '/leaderboard', label: 'Xếp hạng' },
+  { label: 'Cộng đồng', children: COMMUNITY_LINKS },
   { to: '/news', label: 'Tin tức' },
   { to: '/rules', label: 'Luật' },
   { to: '/faq', label: 'FAQ' },
@@ -69,13 +101,13 @@ const Navbar = () => {
 
           <div className={`bnc-nav-collapse ${open ? 'open' : ''}`}>
             <ul className="bnc-nav-links">
-              {NAV.map((n) => (
+              {NAV.map((n) => (n.children ? <NavGroup key={n.label} item={n} pathname={location.pathname} /> : (
                 <li key={n.to}>
                   <NavLink to={n.to} end={n.end} className={({ isActive }) => `bnc-nav-link ${isActive ? 'active' : ''}`}>
                     {n.label}
                   </NavLink>
                 </li>
-              ))}
+              )))}
             </ul>
 
             <div className="bnc-nav-actions">

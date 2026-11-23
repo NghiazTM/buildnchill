@@ -28,6 +28,15 @@ import './styles/pro.css';
 const Admin = lazy(() => import('./pages/Admin'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 const Player = lazy(() => import('./pages/Player'));
+const Stats = lazy(() => import('./pages/Stats'));
+const Compare = lazy(() => import('./pages/Compare'));
+const Builds = lazy(() => import('./pages/Builds'));
+const BuildDetail = lazy(() => import('./pages/BuildDetail'));
+const Events = lazy(() => import('./pages/Events'));
+const Clans = lazy(() => import('./pages/Clans'));
+const ClanDetail = lazy(() => import('./pages/ClanDetail'));
+const WorldMap = lazy(() => import('./pages/WorldMap'));
+const Vote = lazy(() => import('./pages/Vote'));
 
 const Page = ({ children }) => (
   <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeOut' }}>
@@ -53,6 +62,7 @@ const ScrollReset = () => {
 const AppContent = () => {
   const { isAuthenticated, userProfile, authInitialized } = useData();
   const loader = <div className="min-vh-100"><Spinner /></div>;
+  const lazyPage = (C) => <Suspense fallback={loader}><Page><C /></Page></Suspense>;
 
   return (
     <div className="bnc-app">
@@ -68,6 +78,15 @@ const AppContent = () => {
           <Route path="/rules" element={<Page><Rules /></Page>} />
           <Route path="/leaderboard" element={<Suspense fallback={loader}><Page><Leaderboard /></Page></Suspense>} />
           <Route path="/player/:name" element={<Suspense fallback={loader}><Page><Player /></Page></Suspense>} />
+          <Route path="/stats" element={lazyPage(Stats)} />
+          <Route path="/compare/:a?/:b?" element={lazyPage(Compare)} />
+          <Route path="/builds" element={lazyPage(Builds)} />
+          <Route path="/builds/:id" element={lazyPage(BuildDetail)} />
+          <Route path="/events" element={lazyPage(Events)} />
+          <Route path="/clans" element={lazyPage(Clans)} />
+          <Route path="/clans/:tag" element={lazyPage(ClanDetail)} />
+          <Route path="/map" element={lazyPage(WorldMap)} />
+          <Route path="/vote" element={lazyPage(Vote)} />
           <Route path="/faq" element={<Page><Faq /></Page>} />
           <Route path="/contact" element={<Page><Contact /></Page>} />
           <Route path="/shop" element={<Page><Shop /></Page>} />

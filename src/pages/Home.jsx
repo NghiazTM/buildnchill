@@ -11,6 +11,7 @@ import { Seo, useCopy } from '../components/ui';
 import { formatVnd, mcHead, plainText } from '../lib/api';
 import { FEATURES, HOW_TO_JOIN } from '../data/siteContent';
 import OnlinePlayers from '../components/OnlinePlayers';
+import HomeCommunity from '../components/HomeCommunity';
 
 const ICONS = { BiRocket, BiGroup, BiBuildings, BiShieldQuarter };
 
@@ -280,6 +281,9 @@ const Home = () => {
           </div>
         </section>
       )}
+
+      {/* ================= CỘNG ĐỒNG ================= */}
+      <HomeCommunity Eyebrow={Eyebrow} />
 
       {/* ================= NEWS ================= */}
       <section className="bnc-section bnc-section-line">

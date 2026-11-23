@@ -144,6 +144,7 @@ export const WEBHOOKS = {
   contact: () => env('DISCORD_CONTACT_WEBHOOK', 'VITE_DISCORD_CONTACT_WEBHOOK'),
   delivery: () => env('DISCORD_DELIVERY_WEBHOOK', 'DISCORD_SHOP_WEBHOOK', 'VITE_DISCORD_SHOP_WEBHOOK'),
   news: () => env('DISCORD_NEWS_WEBHOOK'),
+  activity: () => env('DISCORD_ACTIVITY_WEBHOOK'),
 };
 
 export const adminMention = () => env('DISCORD_ADMIN_MENTION') || '<@741299302495813662>';

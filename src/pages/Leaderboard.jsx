@@ -36,6 +36,14 @@ const Leaderboard = () => {
   const onlineSet = useMemo(() => new Set((serverStatus?.onlinePlayers || []).map((n) => n.toLowerCase())), [serverStatus?.onlinePlayers]);
   const [cat, setCat] = useState('play');
   const [period, setPeriod] = useState('week');
+  const [season, setSeason] = useState(null);
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    supabase.from('seasons').select('id,name,starts_on,ends_on').lte('starts_on', today).or(`ends_on.is.null,ends_on.gte.${today}`)
+      .order('starts_on', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setSeason(data || null));
+  }, []);
+  const periods = season ? [...PERIODS.slice(0, 3), { id: 'season', label: season.name }, PERIODS[3]] : PERIODS;
   const [rows, setRows] = useState(null);
   const [range, setRange] = useState(24);
   const [history, setHistory] = useState(null);
@@ -59,7 +67,9 @@ const Leaderboard = () => {
     let alive = true;
     setRows(null);
     const req = cat === 'play'
-      ? supabase.rpc('bnc_playtime_top', { p_period: period, p_limit: 50 })
+      ? (period === 'season' && season
+        ? supabase.rpc('bnc_season_top', { p_season: season.id, p_limit: 50 })
+        : supabase.rpc('bnc_playtime_top', { p_period: period === 'season' ? 'week' : period, p_limit: 50 }))
       : supabase.rpc('bnc_stat_top', { p_stat: cat, p_limit: 50 });
     req.then(({ data, error }) => {
       if (!alive) return;
@@ -71,7 +81,7 @@ const Leaderboard = () => {
       })));
     });
     return () => { alive = false; };
-  }, [cat, period]);
+  }, [cat, period, season]);
 
   const fmtValue = (r, short) => {
     if (cat === 'play') return short ? formatDuration(r.value, { coarse: true }) : formatDuration(r.value);
@@ -100,7 +110,7 @@ const Leaderboard = () => {
 
   const top = rows || [];
   const best = top[0]?.value || 1;
-  const periodLabel = cat === 'play' ? PERIODS.find((p) => p.id === period)?.label.toLowerCase() : '';
+  const periodLabel = cat !== 'play' ? '' : period === 'season' && season ? `mùa ${season.name.replace(/^mùa\s+/i, '')}` : PERIODS.find((p) => p.id === period)?.label.toLowerCase();
 
   return (
     <>
@@ -138,7 +148,7 @@ const Leaderboard = () => {
                   </div>
                   {cat === 'play' && (
                     <div className="bnc-lb-tabs" role="tablist">
-                      {PERIODS.map((p) => (
+                      {periods.map((p) => (
                         <button key={p.id} role="tab" aria-selected={period === p.id} className={`bnc-tab ${period === p.id ? 'active' : ''}`} onClick={() => setPeriod(p.id)}>{p.label}</button>
                       ))}
                     </div>

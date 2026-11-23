@@ -8,6 +8,7 @@ import {
   getAdmin, ok, fail, parseBody, header, safeEqual, env, vnd,
   discordSend, discordEdit, orderEmbed, WEBHOOKS, adminMention,
 } from '../lib/common.js';
+import { flushActivityToDiscord } from '../lib/activity.js';
 
 export const handler = async (event) => {
   const secret = env('PLUGIN_SECRET');
@@ -72,6 +73,9 @@ export const handler = async (event) => {
           console.error('[plugin-bridge] stats', error.message);
           return fail(500, /bnc_ingest_stats|schema cache/i.test(error.message || '')
             ? 'Chưa chạy GAME_STATS_MIGRATION.sql trên Supabase' : 'Lỗi lưu thống kê');
+        }
+        if (!body.backfill) {
+          await flushActivityToDiscord(sb).catch((e) => console.warn('[plugin-bridge] activity', e.message));
         }
         return ok({ saved: data ?? 0 });
       }

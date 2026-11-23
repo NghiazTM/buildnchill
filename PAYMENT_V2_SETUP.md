@@ -101,6 +101,14 @@ give {username} diamond 64
 4. Người đang online được gửi số liệu mỗi 60 giây (`stats.interval_seconds`) và khi thoát game.
 5. Số liệu riêng của server (Money, Token, Coins…) lấy qua PlaceholderAPI trong `stats.placeholders` — mỗi mục tự thành một bảng xếp hạng trên web.
 
+## 10. Tính năng cộng đồng (công trình, clan, sự kiện, bản đồ, bình chọn…)
+
+1. Chạy `COMMUNITY_MIGRATION.sql` trong Supabase SQL Editor (sau `GAME_STATS_MIGRATION.sql`). File này tạo luôn bucket Storage `builds` (ảnh công trình, tối đa 3 MB/ảnh).
+2. Thông báo sự kiện trên trình duyệt: chạy `npx web-push generate-vapid-keys`, đặt `VAPID_PUBLIC_KEY` và `VAPID_PRIVATE_KEY` (tuỳ chọn `VAPID_SUBJECT`, ví dụ `mailto:admin@domain`) trên Netlify rồi deploy lại. Hàm `event-reminders` tự chạy mỗi 10 phút và nhắc trước ~30 phút.
+3. (Tuỳ chọn) Thông báo hoạt động lên Discord (người mới, danh hiệu, đổi ngôi top 1, thành tựu thử thách): đặt `DISCORD_ACTIVITY_WEBHOOK`.
+4. Admin → tab **Cộng đồng**: thêm sự kiện, mùa giải (bảng xếp hạng theo mùa + đại sảnh danh vọng), link bản đồ BlueMap/Dynmap (nên dùng https) và các trang bình chọn.
+5. Công trình và clan được kiểm duyệt ngay trên trang của chúng (nút dành cho admin: ẩn, ghim nổi bật, xoá, giải tán clan).
+
 ## Luồng hoạt động
 
 ```
