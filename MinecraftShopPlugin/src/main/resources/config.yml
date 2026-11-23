@@ -16,6 +16,28 @@ poll:
   # Bao nhiêu giây kiểm tra đơn hàng mới một lần (tối thiểu 3, khuyến nghị 10)
   interval_seconds: 10
 
+stats:
+  # Gửi thống kê & thành tựu trong game (giờ chơi, khối đã đào, quái đã hạ...) lên website
+  enabled: true
+  # Bao nhiêu giây gửi một lần cho người đang online (tối thiểu 30)
+  interval_seconds: 60
+  # Lần đầu cài: tự nhập thống kê cũ của toàn bộ người chơi (chạy 1 lần, chạy lại bằng /bncshop syncstats)
+  backfill_on_start: true
+
+  # Lấy thêm số liệu từ plugin khác qua PlaceholderAPI (giống bảng điểm trong game).
+  # key: chữ thường/số/_ ; label: tên hiển thị trên web ; value: placeholder.
+  # Placeholder nào chưa có expansion sẽ tự bỏ qua. Xoá mục nào không muốn công khai.
+  placeholders:
+    money:
+      label: "Money"
+      value: "%vault_eco_balance%"
+    token:
+      label: "Token"
+      value: "%tokenmanager_tokens%"
+    coins:
+      label: "Coins"
+      value: "%playerpoints_points%"
+
 notify:
   # Tiền tố cho tin nhắn lệnh /bncshop
   prefix: "&8[&6BnC-Shop&8] "

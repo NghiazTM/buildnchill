@@ -3,6 +3,7 @@
 //   GET  ?ping=1                 -> { ok: true }
 //   GET  ?online=Steve,Alex      -> { ok: true, deliveries: [...] }   (đánh dấu processing)
 //   POST { results: [{ id, success, message }] }                       (báo kết quả giao)
+//   POST { stats: [...], backfill }                                     (thống kê game, plugin 2.3+)
 import {
   getAdmin, ok, fail, parseBody, header, safeEqual, env, vnd,
   discordSend, discordEdit, orderEmbed, WEBHOOKS, adminMention,
@@ -61,7 +62,21 @@ export const handler = async (event) => {
     }
 
     if (event.httpMethod === 'POST') {
-      const { results } = parseBody(event);
+      const body = parseBody(event);
+
+      // Plugin 2.3+: thống kê & thành tựu lấy thẳng từ game
+      if (Array.isArray(body.stats)) {
+        const rows = body.stats.filter((r) => r && typeof r === 'object').slice(0, 200);
+        const { data, error } = await sb.rpc('bnc_ingest_stats', { p_rows: rows, p_backfill: !!body.backfill });
+        if (error) {
+          console.error('[plugin-bridge] stats', error.message);
+          return fail(500, /bnc_ingest_stats|schema cache/i.test(error.message || '')
+            ? 'Chưa chạy GAME_STATS_MIGRATION.sql trên Supabase' : 'Lỗi lưu thống kê');
+        }
+        return ok({ saved: data ?? 0 });
+      }
+
+      const { results } = body;
       if (!Array.isArray(results)) return fail(400, 'results phải là mảng');
 
       for (const r of results.slice(0, 100)) {

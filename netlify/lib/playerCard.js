@@ -135,7 +135,9 @@ export const renderPlayerCard = async (profile, { serverIp = 'buildnchill.id.vn'
       h('div', { display: 'flex', marginTop: badges.length ? 34 : 44 },
         stat('Tổng giờ chơi', hoursText(profile.total_seconds)),
         stat('Hạng giờ chơi', profile.rank_all ? `#${profile.rank_all}` : '—', profile.rank_all && profile.players_tracked ? `trên ${profile.players_tracked} người` : null),
-        stat('Tuần này', hoursText(profile.week_seconds)))),
+        profile.game && Number(profile.game.adv_done) > 0
+          ? stat('Thành tựu', Number(profile.game.adv_done).toLocaleString('vi-VN'), profile.game.adv_total ? `trên ${profile.game.adv_total}` : null)
+          : stat('Tuần này', hoursText(profile.week_seconds)))),
 
     // Chân thẻ
     h('div', { position: 'absolute', left: 72, bottom: 52, display: 'flex', alignItems: 'center', fontSize: 24 },

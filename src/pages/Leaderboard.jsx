@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BiTime, BiTrendingUp, BiCrown } from 'react-icons/bi';
+import { BiTime, BiTrendingUp, BiCrown, BiTrophy } from 'react-icons/bi';
 import { supabase } from '../supabaseClient';
 import { useData } from '../context/DataContext';
 import { PageHero, Seo, Spinner } from '../components/ui';
 import { AreaChart, BarChart } from '../components/charts';
 import PlayerSearch from '../components/PlayerSearch';
 import { mcHead } from '../lib/api';
-import { formatDuration, timeAgo } from '../lib/playtime';
+import { formatDuration } from '../lib/playtime';
+import { STAT_CATEGORIES, formatStat } from '../lib/gameStats';
 import '../styles/pages.css';
+
+const PLAY = { id: 'play', label: 'Giờ chơi', title: 'Thời gian chơi' };
 
 const PERIODS = [
   { id: 'day', label: 'Hôm nay' },
@@ -31,23 +34,50 @@ const head = (n, s) => mcHead(String(n).replace(/^[.*]/, ''), s);
 const Leaderboard = () => {
   const { serverStatus } = useData();
   const onlineSet = useMemo(() => new Set((serverStatus?.onlinePlayers || []).map((n) => n.toLowerCase())), [serverStatus?.onlinePlayers]);
+  const [cat, setCat] = useState('play');
   const [period, setPeriod] = useState('week');
   const [rows, setRows] = useState(null);
   const [range, setRange] = useState(24);
   const [history, setHistory] = useState(null);
   const [byHour, setByHour] = useState(null);
   const [notReady, setNotReady] = useState(false);
+  const [extras, setExtras] = useState([]);
+  const [hasGameStats, setHasGameStats] = useState(false);
+
+  // Mục xếp hạng: giờ chơi + chỉ số game + số liệu PlaceholderAPI (Money, Token…)
+  useEffect(() => {
+    supabase.rpc('bnc_stat_extras').then(({ data, error }) => {
+      if (error) return;
+      setHasGameStats(true);
+      setExtras((data || []).map((e) => ({ id: `extra:${e.key}`, label: e.label || e.key, title: `Top ${e.label || e.key}`, extra: true })));
+    });
+  }, []);
+  const categories = useMemo(() => [PLAY, ...(hasGameStats ? STAT_CATEGORIES : []), ...extras], [hasGameStats, extras]);
+  const current = categories.find((c) => c.id === cat) || PLAY;
 
   useEffect(() => {
     let alive = true;
     setRows(null);
-    supabase.rpc('bnc_playtime_top', { p_period: period, p_limit: 50 }).then(({ data, error }) => {
+    const req = cat === 'play'
+      ? supabase.rpc('bnc_playtime_top', { p_period: period, p_limit: 50 })
+      : supabase.rpc('bnc_stat_top', { p_stat: cat, p_limit: 50 });
+    req.then(({ data, error }) => {
       if (!alive) return;
-      if (error) setNotReady(true);
-      setRows(data || []);
+      if (error && cat === 'play') setNotReady(true);
+      setRows((data || []).map((r) => ({
+        mc_username: r.mc_username,
+        value: Number(cat === 'play' ? r.seconds : r.value) || 0,
+        display: r.display,
+      })));
     });
     return () => { alive = false; };
-  }, [period]);
+  }, [cat, period]);
+
+  const fmtValue = (r, short) => {
+    if (cat === 'play') return short ? formatDuration(r.value, { coarse: true }) : formatDuration(r.value);
+    if (current.extra) return r.display ?? r.value.toLocaleString('vi-VN');
+    return formatStat(current, r.value, { short });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -69,8 +99,8 @@ const Leaderboard = () => {
   const nowHour = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' })) % 24;
 
   const top = rows || [];
-  const best = top[0]?.seconds || 1;
-  const periodLabel = PERIODS.find((p) => p.id === period)?.label.toLowerCase();
+  const best = top[0]?.value || 1;
+  const periodLabel = cat === 'play' ? PERIODS.find((p) => p.id === period)?.label.toLowerCase() : '';
 
   return (
     <>
@@ -79,7 +109,7 @@ const Leaderboard = () => {
         pill="Cộng đồng"
         title="Bảng xếp hạng"
         highlight="người chơi"
-        subtitle="Ai cày nhiều nhất BuildnChill? Thời gian chơi được tính tự động mỗi 10 giây khi bạn ở trong máy chủ."
+        subtitle="Ai cày nhiều nhất BuildnChill? Giờ chơi, thành tựu, khối đã đào… lấy thẳng từ trong game và cập nhật mỗi phút."
         crumbs={[{ label: 'Bảng xếp hạng' }]}
       >
         <PlayerSearch className="mt-4" />
@@ -94,20 +124,31 @@ const Leaderboard = () => {
             {/* ---------- Bảng xếp hạng ---------- */}
             <div className="col-lg-7">
               <div className="bnc-card bnc-lb">
-                <div className="bnc-lb-head">
-                  <div>
-                    <h2 className="h5 mb-1"><BiTime className="text-accent me-2" />Thời gian chơi</h2>
-                    <div className="small text-dim">Top 50 người chơi {periodLabel}</div>
-                  </div>
-                  <div className="bnc-lb-tabs" role="tablist">
-                    {PERIODS.map((p) => (
-                      <button key={p.id} role="tab" aria-selected={period === p.id} className={`bnc-tab ${period === p.id ? 'active' : ''}`} onClick={() => setPeriod(p.id)}>{p.label}</button>
+                {categories.length > 1 && (
+                  <div className="bnc-lb-cats" role="tablist" aria-label="Mục xếp hạng">
+                    {categories.map((c) => (
+                      <button key={c.id} role="tab" aria-selected={cat === c.id} className={cat === c.id ? 'on' : ''} onClick={() => setCat(c.id)}>{c.label}</button>
                     ))}
                   </div>
+                )}
+                <div className="bnc-lb-head">
+                  <div>
+                    <h2 className="h5 mb-1">{cat === 'play' ? <BiTime className="text-accent me-2" /> : <BiTrophy className="text-accent me-2" />}{current.title}</h2>
+                    <div className="small text-dim">{cat === 'play' ? `Top 50 người chơi ${periodLabel}` : current.desc || `Top 50 theo ${current.label}`}</div>
+                  </div>
+                  {cat === 'play' && (
+                    <div className="bnc-lb-tabs" role="tablist">
+                      {PERIODS.map((p) => (
+                        <button key={p.id} role="tab" aria-selected={period === p.id} className={`bnc-tab ${period === p.id ? 'active' : ''}`} onClick={() => setPeriod(p.id)}>{p.label}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {rows === null ? <Spinner /> : top.length === 0 ? (
-                  <div className="bnc-empty">Chưa có ai chơi {periodLabel}. Vào game ngay để chiếm hạng 1!</div>
+                  <div className="bnc-empty">
+                    {cat === 'play' ? <>Chưa có ai chơi {periodLabel}. Vào game ngay để chiếm hạng 1!</> : 'Chưa có số liệu cho mục này.'}
+                  </div>
                 ) : (
                   <>
                     <div className="bnc-podium">
@@ -116,7 +157,7 @@ const Leaderboard = () => {
                           <span className="rank">{i === 0 ? <BiCrown /> : i + 1}</span>
                           <img src={head(top[i].mc_username, 96)} alt="" width="64" height="64" />
                           <span className="name">{top[i].mc_username}</span>
-                          <span className="time" title={formatDuration(top[i].seconds)}>{formatDuration(top[i].seconds, { coarse: true })}</span>
+                          <span className="time" title={fmtValue(top[i])}>{fmtValue(top[i], true)}</span>
                           {onlineSet.has(top[i].mc_username.toLowerCase()) && <span className="live">Đang online</span>}
                         </Link>
                       ))}
@@ -129,9 +170,9 @@ const Leaderboard = () => {
                             <img src={head(r.mc_username, 32)} alt="" width="28" height="28" loading="lazy" />
                             <span className="who">
                               <span className="name">{r.mc_username}{onlineSet.has(r.mc_username.toLowerCase()) && <span className="dot dot-green ms-2" title="Đang online" />}</span>
-                              <span className="bar"><span style={{ width: `${Math.max(3, (r.seconds / best) * 100)}%` }} /></span>
+                              <span className="bar"><span style={{ width: `${Math.max(3, (r.value / best) * 100)}%` }} /></span>
                             </span>
-                            <span className="time">{formatDuration(r.seconds)}</span>
+                            <span className="time">{fmtValue(r)}</span>
                           </Link>
                         </li>
                       ))}
@@ -189,7 +230,7 @@ const Leaderboard = () => {
               </div>
 
               <div className="bnc-card bnc-card-pad small text-soft">
-                Thời gian chơi được cộng tự động mỗi khi bạn ở trong máy chủ — không cần đăng ký.
+                Số liệu được đồng bộ tự động từ máy chủ khi bạn chơi — không cần đăng ký.
                 {' '}Bấm vào tên bất kỳ để xem hồ sơ chi tiết.
               </div>
             </div>

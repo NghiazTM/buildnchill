@@ -67,7 +67,7 @@ public class BridgeClient {
         }
     }
 
-    private static final String USER_AGENT = "BuildnChillShop/2.0";
+    private static final String USER_AGENT = "BuildnChillShop/2.3";
 
     private final Gson gson = new Gson();
     private final HttpClient http;
@@ -195,5 +195,15 @@ public class BridgeClient {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** POST { stats: [...], backfill } — thống kê & thành tựu người chơi. */
+    public void sendStats(JsonArray rows, boolean backfill) throws BridgeException {
+        if (rows == null || rows.size() == 0) return;
+        JsonObject body = new JsonObject();
+        body.add("stats", rows);
+        body.addProperty("backfill", backfill);
+        send(request(url).timeout(Duration.ofSeconds(25))
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(body), StandardCharsets.UTF_8)).build());
     }
 }

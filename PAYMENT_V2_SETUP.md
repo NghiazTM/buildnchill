@@ -93,6 +93,14 @@ give {username} diamond 64
 2. Trang `/leaderboard`: top giờ chơi (hôm nay / tuần / tháng / mọi lúc), biểu đồ người online, giờ cao điểm.
 3. Trang `/player/<tên>`: hồ sơ công khai. Khi chia sẻ link, Facebook/Zalo/Discord hiện ảnh thẻ riêng (`/api/player-card/<tên>.png`, cập nhật mỗi ngày).
 
+## 9. Thống kê & thành tựu lấy thẳng từ game (plugin 2.3)
+
+1. Chạy  trong Supabase SQL Editor (sau ).
+2. Thay plugin bằng  rồi restart máy chủ. Giữ nguyên  cũ; mục  mới tự dùng giá trị mặc định.
+3. Lần khởi động đầu, plugin tự đọc  và  để nhập lịch sử của **mọi** người chơi cũ. Muốn nhập lại: .
+4. Người đang online được gửi số liệu mỗi 60 giây () và khi thoát game.
+5. Số liệu riêng của server (Money, Token, Coins…) lấy qua PlaceholderAPI trong  — mỗi mục tự thành một bảng xếp hạng trên web.
+
 ## Luồng hoạt động
 
 ```

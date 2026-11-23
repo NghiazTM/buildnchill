@@ -2,13 +2,14 @@ name: MinecraftShopPlugin
 version: ${project.version}
 main: com.buildnchill.shop.MinecraftShopPlugin
 api-version: 1.20
+softdepend: [PlaceholderAPI]
 author: BuildnChill
 description: Tự động giao vật phẩm mua trên website BuildnChill vào game (qua Netlify plugin bridge)
 
 commands:
   bncshop:
     description: Quản lý BuildnChill Shop
-    usage: /<command> <status|reload|poll>
+    usage: /<command> <status|reload|poll|syncstats>
     aliases: [bnc]
     permission: bncshop.admin
 

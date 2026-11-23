@@ -15,6 +15,7 @@ export const playerDescription = (p) => {
   if (!p) return null;
   const parts = [`${p.mc_username} đã chơi ${hoursText(p.total_seconds)} trên BuildnChill`];
   if (p.rank_all) parts[0] += ` — hạng #${p.rank_all} thời gian chơi`;
+  if (p.game && Number(p.game.adv_done) > 0) parts.push(`Đã mở khoá ${p.game.adv_done} thành tựu.`);
   if (p.week_seconds > 0) parts.push(`Tuần này: ${hoursText(p.week_seconds)}.`);
   parts.push('Xem hồ sơ và bảng xếp hạng máy chủ Minecraft sinh tồn Việt Nam.');
   return `${parts[0]}. ${parts.slice(1).join(' ')}`;

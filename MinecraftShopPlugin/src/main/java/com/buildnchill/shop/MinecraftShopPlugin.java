@@ -11,7 +11,15 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import java.io.File;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -40,6 +48,12 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
 
     private BridgeClient client;
     private BukkitTask pollTask;
+    private BukkitTask statsTask;
+    private StatsService stats;
+    /** Người chơi cần gửi lại danh sách thành tựu (mới vào / vừa đạt thành tựu). */
+    private final Set<UUID> needAdvancements = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean backfilling = new AtomicBoolean(false);
+    private volatile String lastStatsError = null;
     private final AtomicBoolean polling = new AtomicBoolean(false);
 
     /** Kết quả chưa gửi được cho bridge — gửi lại ở chu kỳ sau. */
@@ -67,6 +81,7 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        stats = new StatsService(getLogger());
         Bukkit.getPluginManager().registerEvents(this, this);
         if (getCommand("bncshop") != null) {
             getCommand("bncshop").setTabCompleter(this);
@@ -105,6 +120,30 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
         int interval = Math.max(3, cfg.getInt("poll.interval_seconds", 10));
         pollTask = Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollCycle, 40L, interval * 20L);
         getLogger().info("Đang kết nối bridge: " + url + " (mỗi " + interval + " giây)");
+
+        // Thống kê & thành tựu trong game -> website
+        if (cfg.getBoolean("stats.enabled", true)) {
+            Map<String, String[]> ph = new LinkedHashMap<>();
+            org.bukkit.configuration.ConfigurationSection sec = cfg.getConfigurationSection("stats.placeholders");
+            if (sec != null) {
+                for (String key : sec.getKeys(false)) {
+                    String value = sec.getString(key + ".value", "");
+                    if (!key.matches("[a-z0-9_]{1,24}") || value == null || value.isBlank()) continue;
+                    ph.put(key, new String[]{sec.getString(key + ".label", key), value});
+                }
+            }
+            stats.setPlaceholders(ph);
+            int statsInterval = Math.max(30, cfg.getInt("stats.interval_seconds", 60));
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                stats.loadAdvancementMeta();
+                for (Player p : Bukkit.getOnlinePlayers()) needAdvancements.add(p.getUniqueId());
+                if (cfg.getBoolean("stats.backfill_on_start", true) && !backfillMarker().exists()) {
+                    getLogger().info("Lần đầu chạy: đang nhập thống kê cũ của toàn bộ người chơi lên website...");
+                    startBackfill(null);
+                }
+            }, 100L);
+            statsTask = Bukkit.getScheduler().runTaskTimer(this, this::statsCycle, 200L, statsInterval * 20L);
+        }
     }
 
     private void stopTask() {
@@ -112,6 +151,90 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
             pollTask.cancel();
             pollTask = null;
         }
+        if (statsTask != null) {
+            statsTask.cancel();
+            statsTask = null;
+        }
+    }
+
+    // ==================== Thống kê người chơi ====================
+
+    private File backfillMarker() {
+        return new File(getDataFolder(), "stats-backfill.done");
+    }
+
+    /** Main thread: đọc thống kê người đang online rồi gửi async. */
+    private void statsCycle() {
+        if (client == null || stats.advancementTotal() == 0) return;
+        JsonArray rows = new JsonArray();
+        List<UUID> withAdv = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            boolean adv = needAdvancements.remove(p.getUniqueId());
+            if (adv) withAdv.add(p.getUniqueId());
+            try {
+                rows.add(stats.collect(p, adv));
+            } catch (Exception e) {
+                getLogger().fine("Không đọc được thống kê " + p.getName() + ": " + e.getMessage());
+            }
+        }
+        sendStatsAsync(rows, false, withAdv);
+    }
+
+    private void sendStatsAsync(JsonArray rows, boolean backfill, List<UUID> retryAdvOnFail) {
+        BridgeClient bridge = client;
+        if (bridge == null || rows.size() == 0) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                bridge.sendStats(rows, backfill);
+                if (lastStatsError != null) getLogger().info("Đã gửi lại thống kê lên website thành công.");
+                lastStatsError = null;
+            } catch (BridgeClient.BridgeException e) {
+                if (retryAdvOnFail != null) needAdvancements.addAll(retryAdvOnFail);
+                if (!e.getMessage().equals(lastStatsError)) getLogger().warning("[Thống kê] " + e.getMessage());
+                lastStatsError = e.getMessage();
+            }
+        });
+    }
+
+    /** Nhập thống kê cũ từ file của mọi người chơi (sender = null khi tự chạy lần đầu). */
+    private void startBackfill(CommandSender sender) {
+        if (client == null) return;
+        if (!backfilling.compareAndSet(false, true)) {
+            if (sender != null) sender.sendMessage(color(prefix() + "&eĐang nhập thống kê, vui lòng chờ..."));
+            return;
+        }
+        if (stats.advancementTotal() == 0) stats.loadAdvancementMeta();
+        Map<UUID, String> names = StatsService.knownNames();
+        File world = Bukkit.getWorlds().get(0).getWorldFolder();
+        BridgeClient bridge = client;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            int sent = 0;
+            String error = null;
+            try {
+                List<JsonObject> rows = stats.collectFromFiles(world, names);
+                for (int i = 0; i < rows.size(); i += 40) {
+                    JsonArray chunk = new JsonArray();
+                    for (JsonObject o : rows.subList(i, Math.min(rows.size(), i + 40))) chunk.add(o);
+                    bridge.sendStats(chunk, true);
+                    sent += chunk.size();
+                }
+                try {
+                    getDataFolder().mkdirs();
+                    java.nio.file.Files.writeString(backfillMarker().toPath(), new Date() + " - " + sent + " người chơi\n");
+                } catch (Exception ignored) {
+                    // không ghi được dấu -> lần sau chạy lại, không sao
+                }
+            } catch (Exception e) {
+                error = e.getMessage();
+            } finally {
+                backfilling.set(false);
+            }
+            String msg = error == null
+                    ? "&aĐã nhập thống kê của &f" + sent + " &angười chơi lên website."
+                    : "&cNhập thống kê lỗi sau " + sent + " người: " + error;
+            getLogger().info(ChatColor.stripColor(color(msg)));
+            if (sender != null) Bukkit.getScheduler().runTask(this, () -> sender.sendMessage(color(prefix() + msg)));
+        });
     }
 
     // ==================== Poll cycle (async) ====================
@@ -318,6 +441,28 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         requestPoll(60L); // ~3 giây sau khi vào server
+        needAdvancements.add(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        if (client == null || statsTask == null || stats.advancementTotal() == 0) return;
+        Player p = event.getPlayer();
+        needAdvancements.remove(p.getUniqueId());
+        try {
+            JsonArray rows = new JsonArray();
+            rows.add(stats.collect(p, false));
+            sendStatsAsync(rows, false, null);
+        } catch (Exception e) {
+            getLogger().fine("Không đọc được thống kê khi thoát: " + e.getMessage());
+        }
+    }
+
+    @EventHandler
+    public void onAdvancement(PlayerAdvancementDoneEvent event) {
+        if (!event.getAdvancement().getKey().getKey().startsWith("recipes/")) {
+            needAdvancements.add(event.getPlayer().getUniqueId());
+        }
     }
 
     // ==================== Command ====================
@@ -350,8 +495,17 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
                 sendStatus(sender);
                 return true;
 
+            case "syncstats":
+                if (client == null) {
+                    sender.sendMessage(color(prefix() + "&cChưa cấu hình bridge.secret."));
+                    return true;
+                }
+                sender.sendMessage(color(prefix() + "&7Đang đọc thống kê của mọi người chơi..."));
+                startBackfill(sender);
+                return true;
+
             default:
-                sender.sendMessage(color(prefix() + "&eDùng: /" + label + " <status|reload|poll>"));
+                sender.sendMessage(color(prefix() + "&eDùng: /" + label + " <status|reload|poll|syncstats>"));
                 return true;
         }
     }
@@ -393,7 +547,7 @@ public class MinecraftShopPlugin extends JavaPlugin implements Listener, TabComp
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1 && sender.hasPermission("bncshop.admin")) {
             List<String> out = new ArrayList<>();
-            for (String s : Arrays.asList("status", "reload", "poll")) {
+            for (String s : Arrays.asList("status", "reload", "poll", "syncstats")) {
                 if (s.startsWith(args[0].toLowerCase(Locale.ROOT))) out.add(s);
             }
             return out;

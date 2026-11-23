@@ -598,3 +598,52 @@ code, .bnc-code, .bnc-mono { font-family: var(--bnc-mono); }
   .bnc-lb-list li a { gap: .55rem; padding: .55rem .6rem; grid-template-columns: 1.6rem 24px 1fr auto; }
   .bnc-player-search { max-width: none; }
 }
+
+/* ---------- Chỉ số lấy từ game (plugin 2.3+) ---------- */
+.bnc-lb-cats { display: flex; gap: .35rem; padding: 1rem 1.5rem 0; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); mask-image: linear-gradient(90deg, #000 92%, transparent); }
+.bnc-lb-cats::-webkit-scrollbar { display: none; }
+.bnc-lb-cats button { flex: none; border: 1px solid var(--bnc-border-strong); background: none; color: var(--bnc-muted); font-size: .8rem; font-weight: 500; padding: .38rem .8rem; border-radius: 999px; transition: color .15s, border-color .15s, background .15s; }
+.bnc-lb-cats button:hover { color: var(--bnc-text); border-color: var(--bnc-border-hover); }
+.bnc-lb-cats button.on { color: var(--bnc-accent); border-color: rgba(var(--bnc-accent-rgb), .5); background: rgba(var(--bnc-accent-rgb), .1); }
+.bnc-lb-cats + .bnc-lb-head { padding-top: 1rem; }
+
+.bnc-game-extra { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+.bnc-game-extra > div { display: flex; align-items: baseline; gap: .5rem; padding: .45rem .85rem; border-radius: 10px; border: 1px solid rgba(var(--bnc-accent-rgb), .3); background: rgba(var(--bnc-accent-rgb), .06); }
+.bnc-game-extra .k { font-size: .75rem; color: var(--bnc-muted); }
+.bnc-game-extra .v { font-weight: 650; color: var(--bnc-accent); font-variant-numeric: tabular-nums; }
+.bnc-game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; }
+.bnc-game-grid > div { display: flex; flex-direction: column; gap: .2rem; padding: .8rem .9rem; border-radius: 12px; background: rgba(255,255,255,.025); border: 1px solid var(--bnc-border); min-width: 0; }
+.bnc-game-grid .k { font-size: .74rem; color: var(--bnc-dim); }
+.bnc-game-grid .v { font-size: 1.1rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bnc-game-grid .s { font-size: .72rem; color: var(--bnc-dim); }
+.bnc-game-grid .s.gold { color: var(--bnc-accent); font-weight: 600; }
+
+.bnc-ms { list-style: none; margin: 0; padding: 0; display: grid; gap: .95rem; }
+.bnc-ms .top { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+.bnc-ms .name { font-weight: 600; font-size: .92rem; }
+.bnc-ms .tier { font-size: .72rem; font-weight: 650; padding: .15rem .55rem; border-radius: 999px; border: 1px solid currentColor; color: var(--bnc-dim); }
+.bnc-ms .tier.t0 { color: #d89a62; }
+.bnc-ms .tier.t1 { color: #cbd5e1; }
+.bnc-ms .tier.t2 { color: var(--bnc-accent); }
+.bnc-ms .tier.t3 { color: #5eead4; }
+.bnc-ms .tier.t4 { color: #c4b5fd; background: rgba(196,181,253,.1); }
+.bnc-ms .bar, .bnc-adv-bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; }
+.bnc-ms .bar span, .bnc-adv-bar span { display: block; height: 100%; border-radius: inherit; background: var(--bnc-accent); }
+.bnc-ms .sub { margin-top: .3rem; font-size: .74rem; color: var(--bnc-dim); }
+
+.bnc-adv-bar { margin-bottom: .9rem; }
+.bnc-adv { list-style: none; margin: 0; padding: 0; }
+.bnc-adv li { display: flex; align-items: center; gap: .7rem; padding: .5rem 0; border-bottom: 1px solid var(--bnc-border); font-size: .88rem; }
+.bnc-adv li:last-child { border-bottom: 0; }
+.bnc-adv .ic { flex: none; width: 14px; height: 14px; border: 2px solid var(--bnc-muted); border-radius: 3px; }
+.bnc-adv .goal .ic { border-radius: 50%; border-color: #93c5fd; }
+.bnc-adv .challenge .ic { border-color: #c4b5fd; transform: rotate(45deg); border-radius: 2px; }
+.bnc-adv .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bnc-adv .f { font-size: .7rem; color: var(--bnc-dim); }
+.bnc-adv .challenge .f { color: #c4b5fd; }
+.bnc-adv .goal .f { color: #93c5fd; }
+.bnc-adv .when { color: var(--bnc-dim); font-size: .76rem; white-space: nowrap; }
+@media (max-width: 575px) {
+  .bnc-lb-cats { padding: .9rem 1rem 0; }
+  .bnc-game-grid { grid-template-columns: repeat(2, 1fr); }
+}
